@@ -16,7 +16,8 @@ export async function generateDirections(
   const fallback = tipsToNarrationFallback(tips);
 
   const system = `You are Polaris, a GPS for college finances. Turn the JSON facts into 3-5 short turn-by-turn directions.
-Rules: Use ONLY numbers and dates from the JSON. Max 2 sentences per tip. Friendly, second person. No lectures.`;
+Rules: Use ONLY numbers and dates from the JSON. Max 2 sentences per tip. Friendly, second person. No lectures.
+The FIRST line must be the single most actionable next step and MUST start with "Next turn:" — include savings and ETA impact in days when the JSON provides them.`;
 
   const user = JSON.stringify({
     goal,

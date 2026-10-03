@@ -1,3 +1,5 @@
+import { buildNextMoves, primaryNextMove } from "@/lib/advice/next-move";
+import { buildRecoveryPlan } from "@/lib/advice/recovery-plan";
 import { buildTips } from "@/lib/advice/rules";
 import { jsonError, parseJsonBody, rateLimit, requireCustomerId } from "@/lib/api/http";
 import { parseGoalInput } from "@/lib/goals/types";
@@ -39,10 +41,16 @@ export async function POST(request: Request) {
       projection,
       tips,
     );
+    const nextMoves = buildNextMoves(tips, lines);
+    const nextMove = primaryNextMove(tips, lines);
+    const recoveryPlan = buildRecoveryPlan(goal, snapshot);
     return NextResponse.json({
       tips,
       narration,
       lines,
+      nextMoves,
+      nextMove: nextMove?.text ?? null,
+      recoveryPlan,
       projection,
     });
   } catch (e) {

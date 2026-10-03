@@ -1,6 +1,6 @@
 const BASE =
   process.env.NESSIE_API_BASE?.replace(/\/$/, "") ??
-  "http://api.nessieisreal.com";
+  "https://api.nessieisreal.com";
 
 function apiKey(): string {
   const key = process.env.NESSIE_API_KEY;

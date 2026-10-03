@@ -24,6 +24,19 @@ export async function loadFinancialSnapshot(
     return normalizeNessieBundle(raw as RawNessieBundle);
   } catch (e) {
     const message = e instanceof Error ? e.message : "Nessie request failed";
+    if (process.env.DEMO_MODE === "true") {
+      try {
+        const { readFileSync, existsSync } = await import("fs");
+        const { resolve } = await import("path");
+        const cached = resolve(process.cwd(), "data/demo-snapshot.json");
+        if (existsSync(cached)) {
+          const snap = JSON.parse(readFileSync(cached, "utf8")) as FinancialSnapshot;
+          return { ...snap, customerId: cid, fetchedAt: new Date().toISOString() };
+        }
+      } catch {
+        /* fall through */
+      }
+    }
     if (isProduction) {
       throw new Error(message);
     }

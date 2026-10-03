@@ -2,6 +2,8 @@ export type Goal = {
   label: string;
   targetAmount: number;
   targetDate: string;
+  /** When the user set this destination (journey start on the star route). */
+  startDate?: string;
   constellationId: string;
   imagineUrl?: string;
 };
@@ -22,10 +24,13 @@ export function parseGoalInput(raw: {
   }
   const d = new Date(targetDate);
   if (Number.isNaN(d.getTime())) return null;
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
   return {
     label,
     targetAmount,
     targetDate: d.toISOString().slice(0, 10),
+    startDate: start.toISOString().slice(0, 10),
     constellationId: raw.constellationId ?? DEFAULT_CONSTELLATION_ID,
   };
 }

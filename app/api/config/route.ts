@@ -1,4 +1,4 @@
-import { getServerConfig } from "@/lib/env.server";
+import { getServerConfig, isDemoLoginAvailable } from "@/lib/env.server";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -9,6 +9,7 @@ export async function GET() {
   return NextResponse.json({
     fixtureMode: cfg.useFixture,
     hasServerDefaultCustomer: Boolean(cfg.defaultCustomerId),
+    demoLoginAvailable: isDemoLoginAvailable(cfg),
     features: {
       nessie: cfg.useFixture || Boolean(cfg.nessieApiKey),
       grokChat: Boolean(cfg.xaiApiKey),

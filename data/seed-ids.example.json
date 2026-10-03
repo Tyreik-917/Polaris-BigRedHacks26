@@ -1,0 +1,20 @@
+{
+  "maya": {
+    "customerId": "YOUR_MAYA_CUSTOMER_ID",
+    "checkingAccountId": "YOUR_CHECKING_ID",
+    "savingsAccountId": "YOUR_SAVINGS_ID",
+    "name": "Maya Chen"
+  },
+  "sam": {
+    "customerId": "YOUR_SAM_CUSTOMER_ID",
+    "checkingAccountId": "YOUR_SAM_CHECKING_ID",
+    "name": "Sam Rivera"
+  },
+  "merchants": {
+    "Chipotle": "MERCHANT_ID",
+    "Wegmans": "MERCHANT_ID",
+    "Starbucks": "MERCHANT_ID",
+    "Collegetown Bagels": "MERCHANT_ID",
+    "Amazon": "MERCHANT_ID"
+  }
+}

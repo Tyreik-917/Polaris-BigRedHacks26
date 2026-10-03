@@ -1,6 +1,7 @@
 const STORAGE_KEY = "polaris:nessieCustomerId";
 
-export const NESSIE_CUSTOMER_ID_PATTERN = /^[a-f0-9]{24}$/i;
+export const NESSIE_CUSTOMER_ID_PATTERN =
+  /^([a-f0-9]{24}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 export function getStoredCustomerId(): string | null {
   if (typeof window === "undefined") return null;

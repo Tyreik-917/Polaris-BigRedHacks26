@@ -21,6 +21,7 @@ export async function xaiChatCompletion(
       messages,
       temperature: 0.4,
     }),
+    signal: AbortSignal.timeout(45_000),
   });
   if (!res.ok) return null;
   const data = (await res.json()) as {

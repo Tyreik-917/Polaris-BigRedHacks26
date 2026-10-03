@@ -1,7 +1,9 @@
 import { getServerConfig } from "@/lib/env.server";
 import { NextResponse } from "next/server";
 
-const CUSTOMER_ID_PATTERN = /^[a-f0-9]{24}$/i;
+/** Nessie customer ids are Mongo ObjectIds (24 hex) or UUIDs depending on API version. */
+const CUSTOMER_ID_PATTERN =
+  /^([a-f0-9]{24}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 
 export function jsonError(message: string, status = 400) {
   return NextResponse.json({ error: message }, { status });
@@ -27,7 +29,14 @@ export function resolveCustomerId(request: Request): string | null {
   return null;
 }
 
+const FIXTURE_CUSTOMER_ID = "000000000000000000000000";
+
 export function requireCustomerId(request: Request): string | NextResponse {
+  const { useFixture } = getServerConfig();
+  if (useFixture) {
+    return resolveCustomerId(request) ?? FIXTURE_CUSTOMER_ID;
+  }
+
   const id = resolveCustomerId(request);
   if (!id) {
     return jsonError(

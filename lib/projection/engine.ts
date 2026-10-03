@@ -6,6 +6,9 @@ export type DailyPoint = {
   balance: number;
 };
 
+/** Max calendar days to simulate (prevents abuse on far-future goals). */
+export const MAX_PROJECTION_DAYS = 730;
+
 export type ProjectionResult = {
   currentSaved: number;
   targetAmount: number;
@@ -67,12 +70,17 @@ export function projectGoal(
   start.setHours(0, 0, 0, 0);
   const target = new Date(targetDate);
   target.setHours(0, 0, 0, 0);
-  const maxDays = Math.max(
-    120,
-    Math.ceil((target.getTime() - start.getTime()) / 86400000) + 60,
+  const daysToTarget = Math.ceil(
+    (target.getTime() - start.getTime()) / 86400000,
+  );
+  const maxDays = Math.min(
+    MAX_PROJECTION_DAYS,
+    Math.max(120, daysToTarget + 90),
   );
 
-  let balance = currentSaved;
+  const spendAlreadyOut =
+    Math.max(0, snapshot.initialSpendAdjustment ?? 0);
+  let balance = currentSaved - spendAlreadyOut;
   const dailySeries: DailyPoint[] = [];
   let etaDate: string | null = null;
 

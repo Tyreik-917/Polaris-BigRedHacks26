@@ -60,4 +60,6 @@ export type FinancialSnapshot = {
   avgDailyFoodSpend: number;
   estimatedPaycheckAmount: number;
   paycheckIntervalDays: number;
+  /** One-time spend from user reports not yet on Nessie (projection only). */
+  initialSpendAdjustment?: number;
 };

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 export type AppConfig = {
   fixtureMode: boolean;
   hasServerDefaultCustomer: boolean;
+  demoLoginAvailable: boolean;
   features: {
     nessie: boolean;
     grokChat: boolean;

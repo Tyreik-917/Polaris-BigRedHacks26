@@ -1,8 +1,11 @@
 import { jsonError, parseJsonBody, rateLimit } from "@/lib/api/http";
 import {
+  chatFollowUpInstructions,
   createEphemeralToken,
   directionsInstructions,
   goalSettingInstructions,
+  nextMoveInstructions,
+  reportSpendingInstructions,
   REALTIME_URL,
 } from "@/lib/grok/voice-agent";
 import { NextResponse } from "next/server";
@@ -14,7 +17,12 @@ export async function POST(request: Request) {
   if (limited) return limited;
 
   const body = await parseJsonBody<{
-    mode?: "set_goal" | "read_directions";
+    mode?:
+      | "set_goal"
+      | "read_directions"
+      | "read_next_move"
+      | "report_spending"
+      | "chat";
     narration?: string;
   }>(request);
   if (body instanceof NextResponse) return body;
@@ -25,9 +33,15 @@ export async function POST(request: Request) {
   try {
     const token = await createEphemeralToken();
     const instructions =
-      mode === "read_directions" && narration
-        ? directionsInstructions(narration)
-        : goalSettingInstructions();
+      mode === "read_next_move" && narration
+        ? nextMoveInstructions(narration)
+        : mode === "read_directions" && narration
+          ? directionsInstructions(narration)
+          : mode === "report_spending"
+            ? reportSpendingInstructions()
+            : mode === "chat"
+              ? chatFollowUpInstructions()
+              : goalSettingInstructions();
 
     if (!token) {
       return NextResponse.json({

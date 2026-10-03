@@ -63,4 +63,26 @@ describe("projectGoal", () => {
     const result = projectGoal(goal, heavy, ref);
     expect(result.onTrack).toBe(false);
   });
+
+  it("caps projection horizon for far-future goals", () => {
+    const ref = new Date("2025-10-03T12:00:00.000Z");
+    const farGoal: Goal = {
+      ...goal,
+      targetDate: "2099-01-01",
+    };
+    const result = projectGoal(farGoal, baseSnapshot, ref);
+    expect(result.dailySeries.length).toBeLessThanOrEqual(731);
+  });
+
+  it("marks late when ETA is after the goal date", () => {
+    const ref = new Date("2025-10-03T12:00:00.000Z");
+    const tight: Goal = {
+      ...goal,
+      targetDate: "2025-11-01",
+    };
+    const result = projectGoal(tight, baseSnapshot, ref);
+    expect(result.etaDate).toBe("2025-12-12");
+    expect(result.onTrack).toBe(false);
+    expect(result.daysEarlyOrLate).toBe(-42);
+  });
 });

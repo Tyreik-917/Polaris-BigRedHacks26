@@ -1,6 +1,7 @@
 "use client";
 
 import { polarisFetch } from "@/lib/api/client-fetch";
+import { financialSnapshotSignature } from "@/lib/nessie/purchase-detection";
 import type { FinancialSnapshot } from "@/lib/nessie/types";
 import { useCallback, useState } from "react";
 
@@ -18,26 +19,43 @@ export function useFinancialSnapshot() {
   const [snapshot, setSnapshot] = useState<FinancialSnapshot | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [usingFixture, setUsingFixture] = useState(false);
-
-  const sync = useCallback(async () => {
-    setLoading(true);
-    setError(null);
+  const fetchSnapshot = useCallback(async (options?: { silent?: boolean }) => {
+    const silent = options?.silent ?? false;
+    if (!silent) {
+      setLoading(true);
+      setError(null);
+    }
     try {
       const res = await polarisFetch("/api/sync");
       if (!res.ok) throw new Error(await readApiError(res));
       const data = (await res.json()) as FinancialSnapshot;
-      setSnapshot(data);
-      setUsingFixture(data.customerId === "demo");
+      setSnapshot((prev) => {
+        if (
+          silent &&
+          prev &&
+          financialSnapshotSignature(prev) === financialSnapshotSignature(data)
+        ) {
+          return prev;
+        }
+        return data;
+      });
       return data;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Sync failed";
-      setError(msg);
+      if (!silent) {
+        const msg = e instanceof Error ? e.message : "Sync failed";
+        setError(msg);
+      }
       return null;
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
 
-  return { snapshot, loading, error, sync, setSnapshot, usingFixture };
+  const sync = useCallback(() => fetchSnapshot(), [fetchSnapshot]);
+  const syncSilent = useCallback(
+    () => fetchSnapshot({ silent: true }),
+    [fetchSnapshot],
+  );
+
+  return { snapshot, loading, error, sync, syncSilent, setSnapshot };
 }

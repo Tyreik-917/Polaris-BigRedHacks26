@@ -1,5 +1,6 @@
 import type { Goal } from "@/lib/goals/types";
 import type { FinancialSnapshot } from "@/lib/nessie/types";
+import { formatProjectionDate } from "@/lib/projection/eta-copy";
 import { etaDeltaIfSavedIncreases, type ProjectionResult } from "@/lib/projection/engine";
 import { isFoodPurchase, purchasesInLastDays } from "@/lib/projection/spending";
 
@@ -15,12 +16,17 @@ export type TipCandidate = {
 const TEMPLATES: Record<string, (f: TipFacts) => string> = {
   bill_soon: (f) =>
     `${f.payee} posts in ${f.daysUntil} days. You're clear, with $${f.cushion} to spare after it hits.`,
-  food_pace: (f) =>
-    `You've spent $${f.foodSpend} on food since Monday. One more takeout this week puts you off course — cooking twice gets you back on time.`,
+  food_pace: (f) => {
+    const intro = `You've spent $${f.foodSpend} on food since Monday.`;
+    if (f.savings != null && f.etaImpactDays != null) {
+      return `${intro} Cook twice this week instead of ordering in — that saves $${f.savings} and moves your arrival up ${f.etaImpactDays} days.`;
+    }
+    return `${intro} One more takeout this week puts you off course — cooking twice gets you back on time.`;
+  },
   receivable: (f) =>
-    `${f.name} still owes you $${f.amount}. Collecting it moves your ETA up ${f.etaImpactDays} days.`,
+    `${f.name} still owes you $${f.amount}. Send a Nessie P2P request with one tap — paying you moves your ETA up ${f.etaImpactDays} days.`,
   off_track: (f) =>
-    `At your current pace, you'll reach $${f.targetAmount} on ${f.etaDate} — ${f.daysLate} days late.`,
+    `At your current pace, you'll arrive ${f.etaDate}, ${f.daysLate} days late.`,
   on_track: (f) =>
     `You're on course to arrive by ${f.targetDate}. Stay within about $${f.dailyBudget}/day on extras.`,
 };
@@ -63,6 +69,7 @@ export function buildTips(
       facts: {
         payee: upcoming.bill.payee,
         daysUntil: upcoming.days,
+        billAmount: upcoming.bill.amount,
         cushion: Math.max(cushion, 0),
       },
     });
@@ -78,12 +85,24 @@ export function buildTips(
     .reduce((s, p) => s + p.amount, 0);
 
   if (foodSpend > 0) {
+    const recentFood = purchasesInLastDays(snapshot.purchases, 14, ref)
+      .filter(isFoodPurchase)
+      .filter((p) => new Date(p.date) >= monday);
+    const avgTakeout =
+      recentFood.length > 0
+        ? recentFood.reduce((s, p) => s + p.amount, 0) / recentFood.length
+        : 12;
+    const savings = Math.round(avgTakeout * 2);
+    const etaImpactDays =
+      etaDeltaIfSavedIncreases(goal, snapshot, savings, ref) ?? 3;
     tips.push({
       id: "food",
       priority: 2,
       templateKey: "food_pace",
       facts: {
         foodSpend: Math.round(foodSpend),
+        savings,
+        etaImpactDays,
       },
     });
   }
@@ -114,7 +133,8 @@ export function buildTips(
       templateKey: "off_track",
       facts: {
         targetAmount: goal.targetAmount,
-        etaDate: projection.etaDate,
+        targetDate: goal.targetDate,
+        etaDate: formatProjectionDate(projection.etaDate),
         daysLate,
       },
     });
@@ -130,6 +150,7 @@ export function buildTips(
       facts: {
         targetDate: goal.targetDate,
         dailyBudget: slack,
+        targetAmount: goal.targetAmount,
       },
     });
   }

@@ -11,5 +11,5 @@ export function polarisFetch(
   if (customerId) {
     headers.set("x-polaris-customer-id", customerId);
   }
-  return fetch(input, { ...init, headers });
+  return fetch(input, { credentials: "include", ...init, headers });
 }

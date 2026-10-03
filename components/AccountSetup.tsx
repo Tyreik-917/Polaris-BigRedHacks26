@@ -9,7 +9,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -40,12 +39,16 @@ export function AccountSetup({
   if (linked && !required) {
     return (
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogTrigger asChild>
-          <Button variant="outline" size="sm" className="border-slate-700 gap-2">
-            <Settings2 className="h-4 w-4" />
-            Nessie account
-          </Button>
-        </DialogTrigger>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="gap-2 border-slate-700"
+          onClick={() => setOpen(true)}
+        >
+          <Settings2 className="h-4 w-4" />
+          Nessie account
+        </Button>
         <DialogContent className="border-slate-800 bg-slate-950">
           <DialogHeader>
             <DialogTitle>Nessie customer ID</DialogTitle>
@@ -61,7 +64,7 @@ export function AccountSetup({
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               className="border-slate-700 bg-slate-900 font-mono text-sm"
-              placeholder="24-character ID from Nessie profile"
+              placeholder="Customer ID from Nessie profile"
             />
             {error && <p className="text-sm text-red-400">{error}</p>}
           </div>
@@ -70,7 +73,7 @@ export function AccountSetup({
               type="button"
               onClick={() => {
                 if (!isValidNessieCustomerId(draft)) {
-                  setError("Enter the 24-character customer ID from your Nessie profile.");
+                  setError("Enter a valid customer ID from your Nessie profile.");
                   return;
                 }
                 setError(null);

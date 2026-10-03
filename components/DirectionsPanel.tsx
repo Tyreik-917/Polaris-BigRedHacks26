@@ -19,8 +19,8 @@ export function DirectionsPanel({ lines, tips, loading }: Props) {
   return (
     <Card className="border-slate-800 bg-slate-900/60">
       <CardHeader>
-        <CardTitle>Turn-by-turn</CardTitle>
-        <CardDescription>GPS directions for your money</CardDescription>
+        <CardTitle>Full route</CardTitle>
+        <CardDescription>All turns on your money map</CardDescription>
       </CardHeader>
       <CardContent>
         {loading && (

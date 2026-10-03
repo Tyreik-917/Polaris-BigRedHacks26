@@ -5,11 +5,25 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
+  --color-night: #0b1020;
+  --color-sky: #0d1430;
+  --color-panel: #141b33;
+  --color-bubble: #161e3a;
+  --color-card: #121937;
+  --color-line: #1e2647;
+  --color-border: #2a3358;
+  --color-ink: #e8ecf7;
+  --color-muted: #a9b1cc;
+  --color-star: #f5c451;
+  --color-star-ink: #1a1405;
+  --color-offcourse: #f5a372;
+  --color-offcourse-bg: #3a2215;
+  --color-old-route: #5a6694;
+  --font-sans: var(--font-dm-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-space-grotesk), ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
-  --font-heading: var(--font-sans);
+  --font-mono: ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -122,9 +136,12 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-night text-ink;
   }
   html {
     @apply font-sans;
+  }
+  .font-heading {
+    font-family: var(--font-heading);
   }
 }
