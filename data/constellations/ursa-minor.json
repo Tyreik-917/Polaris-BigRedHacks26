@@ -1,0 +1,15 @@
+{
+  "id": "ursa-minor",
+  "name": "Ursa Minor",
+  "northStarHip": 11767,
+  "edges": [[11767, 85822], [85822, 82080], [82080, 77055], [77055, 75097], [75097, 72607], [72607, 70692], [70692, 11767]],
+  "stars": [
+    { "hip": 11767, "name": "Polaris", "ra": 2.5303, "dec": 89.2641, "mag": 1.98 },
+    { "hip": 85822, "name": "Yildun", "ra": 17.5369, "dec": 86.5865, "mag": 4.35 },
+    { "hip": 82080, "name": "Epsilon UMi", "ra": 16.7666, "dec": 82.0373, "mag": 4.23 },
+    { "hip": 77055, "name": "Anwar al Farkadain", "ra": 15.7347, "dec": 77.7945, "mag": 3.0 },
+    { "hip": 75097, "name": "Akfa al Farkadain", "ra": 15.3456, "dec": 75.7553, "mag": 4.32 },
+    { "hip": 72607, "name": "Pherkad", "ra": 14.8451, "dec": 74.1555, "mag": 3.05 },
+    { "hip": 70692, "name": "Kochab", "ra": 14.4748, "dec": 72.7789, "mag": 2.08 }
+  ]
+}
