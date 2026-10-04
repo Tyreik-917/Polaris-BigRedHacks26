@@ -1,7 +1,9 @@
 /** Display API numbers without client-side math beyond formatting. */
 
 export function formatUsd(amount: number): string {
-  return `$${amount.toFixed(amount % 1 === 0 ? 0 : 2)}`;
+  const abs = Math.abs(amount);
+  const text = `$${abs.toFixed(abs % 1 === 0 ? 0 : 2)}`;
+  return amount < 0 ? `−${text}` : text;
 }
 
 export function formatMonDay(iso: string): string {

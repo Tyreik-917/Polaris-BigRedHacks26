@@ -31,6 +31,8 @@ type UIState = {
   markMoveApplied: (moveId: string) => void;
   setDemoPanelOpen: (open: boolean) => void;
   resetReroute: () => void;
+  /** Clears all per-trip UI state (demo reset / new destination). */
+  resetTrip: () => void;
 };
 
 export const useUIStore = create<UIState>((set) => ({
@@ -57,5 +59,13 @@ export const useUIStore = create<UIState>((set) => ({
     set({
       rerouteState: "none",
       previousWaypoints: null,
+    }),
+  resetTrip: () =>
+    set({
+      transcript: [],
+      rerouteState: "none",
+      previousWaypoints: null,
+      appliedMoveIds: [],
+      demoPanelOpen: false,
     }),
 }));

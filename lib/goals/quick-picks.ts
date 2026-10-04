@@ -11,6 +11,13 @@ export type QuickPickDestination = {
 
 export const QUICK_PICK_DESTINATIONS: QuickPickDestination[] = [
   {
+    id: "save-1000-dec10",
+    chipLabel: "$1,000 by Dec 10",
+    label: "Save $1,000",
+    targetAmount: 1000,
+    targetDate: "2026-12-10",
+  },
+  {
     id: "flight-home",
     chipLabel: "Flight home",
     label: "Flight home",

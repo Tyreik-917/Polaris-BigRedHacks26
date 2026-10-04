@@ -9,7 +9,7 @@ import { buildProjectionForGoal } from "@/lib/polaris/build-projection";
 import { generatePostcard } from "@/lib/postcard/generate";
 import { loadSeedIds } from "@/lib/seed-ids";
 import type { Goal } from "@/lib/types";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { z } from "zod";
 
@@ -49,16 +49,24 @@ export async function POST(request: Request) {
 
   await saveGoal(goal);
 
-  const snapshot = await loadFinancialSnapshot(customerId);
+  const nessieSnapshot = await loadFinancialSnapshot(customerId);
   const seenIds = [
-    ...snapshot.purchases.map((p) => p.id),
-    ...snapshot.transfers.map((t) => `transfer:${t.id}`),
+    ...nessieSnapshot.purchases.map((p) => p.id),
+    ...nessieSnapshot.transfers.map((t) => `transfer:${t.id}`),
   ].filter(Boolean);
   await addSeenTransactionIds(goal.id, seenIds);
 
-  const { projection } = await buildProjectionForGoal(goal);
+  const { projection, snapshot } = await buildProjectionForGoal(goal);
+  const { buildOverview } = await import("@/lib/polaris/overview");
+  const overview = buildOverview(snapshot, goal.targetDate);
 
-  void generatePostcard(goal);
+  after(() => generatePostcard(goal));
 
-  return NextResponse.json({ goal, projection });
+  const polarisMessage =
+    `Destination set. I checked your Capital One accounts, your bills and your paydays. ` +
+    `ETA ${projection.eta ? new Date(`${projection.eta}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "—"}, ` +
+    `${projection.daysLate > 0 ? `${projection.daysLate} days late` : "on track"} at your current pace. ` +
+    `I mapped every bill and payday between now and ${new Date(`${goal.targetDate}T12:00:00`).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Each one is a star on your route.`;
+
+  return NextResponse.json({ goal, projection, overview, polarisMessage });
 }

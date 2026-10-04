@@ -1,22 +1,29 @@
 {
-  "fetchedAt": "2025-10-03T12:00:00.000Z",
+  "fetchedAt": "2026-10-03T12:00:00.000Z",
   "customerId": "demo",
-  "checkingBalance": 318.42,
-  "savingsBalance": 142.5,
-  "totalLiquid": 460.92,
+  "checkingBalance": 612.4,
+  "savingsBalance": 112,
+  "totalLiquid": 724.4,
   "bills": [
     {
-      "id": "b1",
-      "payee": "Campus Rent",
-      "amount": 650,
-      "dueDate": "2025-10-07",
+      "id": "b-rent",
+      "payee": "Rent",
+      "amount": 820,
+      "dueDate": "2026-11-05",
       "recurring": true
     },
     {
-      "id": "b2",
-      "payee": "Phone Bill",
+      "id": "b-phone",
+      "payee": "Phone bill",
       "amount": 45,
-      "dueDate": "2025-10-12",
+      "dueDate": "2026-10-12",
+      "recurring": true
+    },
+    {
+      "id": "b-spotify",
+      "payee": "Spotify",
+      "amount": 11,
+      "dueDate": "2026-11-20",
       "recurring": true
     }
   ],
@@ -24,39 +31,23 @@
     {
       "id": "p1",
       "amount": 12.5,
-      "date": "2025-10-01",
-      "description": "Campus Cafe",
-      "merchantName": "Campus Cafe",
+      "date": "2026-10-01",
+      "description": "Chipotle",
+      "merchantName": "Chipotle",
       "category": "Food"
     },
     {
       "id": "p2",
-      "amount": 18.2,
-      "date": "2025-10-02",
-      "description": "Chipotle",
-      "merchantName": "Chipotle",
-      "category": "Restaurant"
-    },
-    {
-      "id": "p3",
-      "amount": 9.8,
-      "date": "2025-09-30",
-      "description": "Grocery run",
+      "amount": 15,
+      "date": "2026-10-02",
+      "description": "Wegmans",
       "merchantName": "Wegmans",
       "category": "Grocery"
     },
     {
-      "id": "p4",
-      "amount": 22,
-      "date": "2025-09-29",
-      "description": "Takeout",
-      "merchantName": "Thai Place",
-      "category": "Restaurant"
-    },
-    {
-      "id": "p5",
-      "amount": 15,
-      "date": "2025-09-28",
+      "id": "p3",
+      "amount": 5.5,
+      "date": "2026-09-30",
       "description": "Coffee",
       "merchantName": "Starbucks",
       "category": "Food"
@@ -65,36 +56,21 @@
   "deposits": [
     {
       "id": "d1",
-      "amount": 450,
-      "date": "2025-09-27",
+      "amount": 380,
+      "date": "2026-09-26",
       "description": "Campus job paycheck"
     },
     {
       "id": "d2",
-      "amount": 450,
-      "date": "2025-09-13",
+      "amount": 380,
+      "date": "2026-09-12",
       "description": "Campus job paycheck"
     }
   ],
-  "transfers": [
-    {
-      "id": "t1",
-      "amount": 25,
-      "date": "2025-09-26",
-      "description": "Sam owes me for weekend tickets",
-      "direction": "out",
-      "counterparty": "Sam"
-    }
-  ],
-  "receivables": [
-    {
-      "name": "Sam",
-      "amount": 25,
-      "note": "Weekend tickets split"
-    }
-  ],
-  "avgDailySpend": 11.07,
-  "avgDailyFoodSpend": 8.21,
-  "estimatedPaycheckAmount": 450,
+  "transfers": [],
+  "receivables": [],
+  "avgDailySpend": 6.43,
+  "avgDailyFoodSpend": 6.43,
+  "estimatedPaycheckAmount": 380,
   "paycheckIntervalDays": 14
 }

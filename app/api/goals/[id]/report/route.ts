@@ -1,5 +1,6 @@
 import { jsonError, parseJsonBody, rateLimit } from "@/lib/api/http";
 import { addReportedSpend, getGoal } from "@/lib/goals/store";
+import { parseSpendingReportFromText } from "@/lib/grok/parse-spending-report";
 import { buildProjectionForGoal } from "@/lib/polaris/build-projection";
 import type { RouteEvent } from "@/lib/types";
 import { NextResponse } from "next/server";
@@ -9,10 +10,28 @@ export const dynamic = "force-dynamic";
 
 type Params = { params: Promise<{ id: string }> };
 
-const bodySchema = z.object({
+const structuredSchema = z.object({
   description: z.string().min(1).max(200),
-  amount: z.number().positive(),
+  amount: z.number().positive().max(50_000),
 });
+
+const textSchema = z.object({
+  text: z.string().min(1).max(2000),
+});
+
+async function readReport(
+  body: unknown,
+): Promise<{ description: string; amount: number } | null> {
+  const structured = structuredSchema.safeParse(body);
+  if (structured.success) return structured.data;
+
+  const text = textSchema.safeParse(body);
+  if (!text.success) return null;
+  const report = await parseSpendingReportFromText(text.data.text);
+  return report
+    ? { description: report.description, amount: report.amount }
+    : null;
+}
 
 export async function POST(request: Request, { params }: Params) {
   const limited = rateLimit(request, "goal-report");
@@ -25,18 +44,23 @@ export async function POST(request: Request, { params }: Params) {
   const body = await parseJsonBody(request);
   if (body instanceof NextResponse) return body;
 
-  const parsed = bodySchema.safeParse(body);
-  if (!parsed.success) return jsonError(parsed.error.message, 400);
-
   try {
+    const report = await readReport(body);
+    if (!report) {
+      return jsonError(
+        'Tell me what you spent, with an amount — e.g. "$30 on a textbook".',
+        422,
+      );
+    }
+
     const { projection: before } = await buildProjectionForGoal(goal);
-    await addReportedSpend(goal.id, parsed.data.amount);
+    await addReportedSpend(goal.id, report.amount);
     const { projection: after } = await buildProjectionForGoal(goal);
 
     const event: RouteEvent = {
       type: "user_reported",
-      description: parsed.data.description,
-      amount: parsed.data.amount,
+      description: report.description,
+      amount: report.amount,
       previousEta: before.eta,
       newEta: after.eta,
     };

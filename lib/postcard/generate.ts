@@ -20,20 +20,26 @@ async function destinationFromGoalName(name: string): Promise<string> {
 
 export async function generatePostcard(goal: Goal): Promise<void> {
   const started = Date.now();
+  let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     const destination = await destinationFromGoalName(goal.name);
     const prompt = `A vintage travel postcard of ${destination}, night sky with a bright North Star, warm gold and deep navy palette, no text.`;
     const url = await Promise.race([
       generateDestinationImage(prompt),
-      new Promise<null>((resolve) =>
-        setTimeout(() => resolve(null), TIMEOUT_MS - (Date.now() - started)),
-      ),
+      new Promise<null>((resolve) => {
+        timer = setTimeout(
+          () => resolve(null),
+          Math.max(0, TIMEOUT_MS - (Date.now() - started)),
+        );
+      }),
     ]);
     await updateGoal(goal.id, {
       postcardUrl: url ?? FALLBACK,
     });
   } catch {
     await updateGoal(goal.id, { postcardUrl: FALLBACK });
+  } finally {
+    clearTimeout(timer);
   }
 }
 

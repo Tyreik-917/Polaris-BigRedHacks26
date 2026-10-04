@@ -1,4 +1,10 @@
-import { addReportedSpend, getGoal, saveGoal } from "@/lib/goals/store";
+import {
+  addReportedIncome,
+  addReportedSpend,
+  getGoal,
+  saveGoal,
+} from "@/lib/goals/store";
+import { depositIncomeToChecking } from "@/lib/polaris/income-deposit";
 import { buildProjectionForGoal } from "@/lib/polaris/build-projection";
 import { parseGoalFromText } from "@/lib/grok/parse-goal";
 import { loadSeedIds } from "@/lib/seed-ids";
@@ -95,8 +101,13 @@ export async function runVoiceTool(
       if (!goal) return { error: "No active goal." };
       const moveId = String(args.moveId ?? "");
       const { projection: before } = await buildProjectionForGoal(goal);
-      if (moveId === "receivable_sam") {
-        await addReportedSpend(goal.id, -25);
+      if (moveId === "receivable_sam" || moveId === "move-tips") {
+        const amount = moveId === "move-tips" ? 85 : 25;
+        await addReportedIncome(goal.id, amount, {
+          description: moveId === "move-tips" ? "Tips" : "Sam payback",
+          label: moveId === "move-tips" ? "Tips" : "Transfer",
+        });
+        await depositIncomeToChecking(amount, "Polaris move applied");
       }
       const { projection: after } = await buildProjectionForGoal(goal);
       return {

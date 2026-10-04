@@ -29,16 +29,20 @@ const LOGIN_STARS: { x: number; y: number; r: number; o: number }[] = [
 export function LoginScreen() {
   const router = useRouter();
   const demo = useDemoLogin();
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState("tyreikr11@cornell.edu");
   const [password, setPassword] = useState("");
 
-  const goDemo = () => {
-    demo.mutate(undefined, {
-      onSuccess: (data) => {
-        if (data.customerId) setStoredCustomerId(data.customerId);
-        router.push("/destination");
+  const logIn = () => {
+    if (demo.isPending) return;
+    demo.mutate(
+      { email, password },
+      {
+        onSuccess: (data) => {
+          if (data.customerId) setStoredCustomerId(data.customerId);
+          router.push("/destination?story=save-1000-dec10");
+        },
       },
-    });
+    );
   };
 
   return (
@@ -89,7 +93,7 @@ export function LoginScreen() {
                 className="space-y-4"
                 onSubmit={(e) => {
                   e.preventDefault();
-                  goDemo();
+                  logIn();
                 }}
               >
                 <div>
@@ -103,8 +107,12 @@ export function LoginScreen() {
                     id="email"
                     type="email"
                     autoComplete="email"
+                    required
                     value={email}
-                    onChange={(e) => setEmail(e.target.value)}
+                    onChange={(e) => {
+                      setEmail(e.target.value);
+                      if (demo.isError) demo.reset();
+                    }}
                     placeholder="you@school.edu"
                     className="h-[52px] w-full rounded-xl border border-border bg-panel px-4 text-[15px] text-ink placeholder:text-muted/60 focus:border-star focus:outline-none focus:ring-2 focus:ring-star/25"
                   />
@@ -120,17 +128,36 @@ export function LoginScreen() {
                     id="password"
                     type="password"
                     autoComplete="current-password"
+                    required
                     value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    onChange={(e) => {
+                      setPassword(e.target.value);
+                      if (demo.isError) demo.reset();
+                    }}
                     placeholder="••••••••"
                     className="h-[52px] w-full rounded-xl border border-border bg-panel px-4 text-[15px] text-ink placeholder:text-muted/60 focus:border-star focus:outline-none focus:ring-2 focus:ring-star/25"
                   />
                 </div>
+                {demo.isError && (
+                  <p role="alert" className="text-[14px] text-offcourse">
+                    {demo.error instanceof Error
+                      ? demo.error.message
+                      : "Couldn't log in. Try again."}
+                  </p>
+                )}
                 <button
                   type="submit"
-                  className="h-[52px] w-full rounded-xl bg-star text-[16px] font-semibold text-star-ink transition-opacity hover:opacity-95"
+                  disabled={demo.isPending}
+                  className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl bg-star text-[16px] font-semibold text-star-ink transition-opacity hover:opacity-95 disabled:opacity-60"
                 >
-                  Log in
+                  {demo.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                      Logging in…
+                    </>
+                  ) : (
+                    "Log in"
+                  )}
                 </button>
                 <p className="text-center text-[14px] text-muted">
                   New here?{" "}
@@ -142,28 +169,6 @@ export function LoginScreen() {
                   </Link>
                 </p>
               </form>
-
-              <div className="my-5 flex items-center gap-3 text-[13px] text-muted">
-                <span className="h-px flex-1 bg-line" />
-                or
-                <span className="h-px flex-1 bg-line" />
-              </div>
-
-              <button
-                type="button"
-                disabled={demo.isPending}
-                onClick={goDemo}
-                className="flex h-[52px] w-full items-center justify-center gap-2 rounded-xl border border-star/80 bg-star/5 text-[15px] font-medium text-star transition-colors hover:bg-star/10 disabled:opacity-60"
-              >
-                {demo.isPending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                    Connecting…
-                  </>
-                ) : (
-                  "Continue as Maya (demo)"
-                )}
-              </button>
             </div>
 
             <p className="mt-8 text-center text-[12px] leading-relaxed text-muted">

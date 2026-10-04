@@ -45,11 +45,8 @@ export function AccountSummaryCard({
     <article className="rounded-2xl border border-border bg-card p-4">
       <header className="flex items-baseline justify-between gap-2">
         <h2 className="font-heading text-[17px] font-bold text-ink">
-          {goal.name}
-        </h2>
-        <p className="text-[13px] tabular-nums text-muted">
           {formatUsd(goal.targetAmount)} by {formatMonDay(goal.targetDate)}
-        </p>
+        </h2>
       </header>
       <div className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
         <div className="rounded-xl bg-panel px-3 py-2">
@@ -65,7 +62,9 @@ export function AccountSummaryCard({
           </p>
         </div>
         <div className="rounded-xl bg-panel px-3 py-2">
-          <p className="text-muted">Bills before target</p>
+          <p className="text-muted">
+            Bills before {formatMonDay(goal.targetDate)}
+          </p>
           <p className="mt-1 font-medium tabular-nums text-ink">
             {formatUsd(overview.billsBeforeTarget)}
           </p>
@@ -73,9 +72,25 @@ export function AccountSummaryCard({
         <div className="rounded-xl bg-panel px-3 py-2">
           <p className="text-muted">Food spending</p>
           <p className="mt-1 font-medium tabular-nums text-ink">
-            {formatUsd(overview.foodSpending)}
+            {formatUsd(overview.foodSpending)} / wk
           </p>
         </div>
+        {overview.paycheckIntervalLabel && (
+          <div className="rounded-xl bg-panel px-3 py-2">
+            <p className="text-muted">Paydays</p>
+            <p className="mt-1 font-medium text-ink">
+              {overview.paycheckIntervalLabel}
+            </p>
+          </div>
+        )}
+        {overview.paycheckAmount != null && overview.paycheckAmount > 0 && (
+          <div className="rounded-xl bg-panel px-3 py-2">
+            <p className="text-muted">Each paycheck</p>
+            <p className="mt-1 font-medium tabular-nums text-ink">
+              {formatUsd(overview.paycheckAmount)}
+            </p>
+          </div>
+        )}
       </div>
       <p
         className={cn(

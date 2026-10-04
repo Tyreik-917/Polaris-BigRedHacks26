@@ -29,7 +29,9 @@ export function NextMoveCallout({ move, onSpeak, className }: Props) {
         {move.label}
       </p>
       <p className="mt-1 text-[11px] text-muted">
-        ETA {move.daysGained} days sooner
+        {move.daysGained > 0
+          ? `ETA ${move.daysGained} day${move.daysGained === 1 ? "" : "s"} sooner`
+          : `Saves $${move.savings}`}
       </p>
     </button>
   );

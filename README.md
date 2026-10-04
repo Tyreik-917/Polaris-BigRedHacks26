@@ -4,23 +4,29 @@ Polaris helps college students reach a savings goal with forward-looking ETA, Ne
 
 Built with **Next.js**, **TypeScript**, **Tailwind**, **shadcn/ui**, **Capital One Nessie**, and **xAI Grok**.
 
-## Production deployment (Vercel)
+## Environment variables
 
-1. **Push** this repo to GitHub and import it in [Vercel](https://vercel.com).
-2. **Environment variables** (Project → Settings → Environment Variables):
+Copy `.env.example` to `.env.local` (local) or set the same keys in your host’s environment.
 
-   | Variable | Required | Notes |
-   |----------|----------|--------|
-   | `NESSIE_API_KEY` | Yes (prod) | Server-only; from Nessie profile |
-   | `XAI_API_KEY` | Recommended | Voice, directions, Imagine |
-   | `NESSIE_CUSTOMER_ID` | Optional | Default customer for single-tenant; users can override in UI |
-   | `POLARIS_USE_FIXTURE` | **No** | Keep `false` in production |
-   | `XAI_CHAT_MODEL` | Optional | Default `grok-3-mini-fast` |
-   | `XAI_IMAGINE_MODEL` | Optional | Default `grok-imagine-image` |
+| Variable | Required | Notes |
+|----------|----------|--------|
+| `NESSIE_API_KEY` | Yes | Server-only; from Nessie profile |
+| `XAI_API_KEY` | Recommended | Voice, directions, Imagine |
+| `NESSIE_CUSTOMER_ID` | Optional | Default customer for single-tenant; users can override in UI |
+| `POLARIS_USE_FIXTURE` | Demo only | Keep `false` when using live Nessie data |
+| `XAI_CHAT_MODEL` | Optional | Default `grok-3-mini-fast` |
+| `XAI_IMAGINE_MODEL` | Optional | Default `grok-imagine-image` |
 
-3. **Deploy** — build command `npm run build`, output Next.js default.
-4. **Health check** — `GET /api/health` after deploy.
-5. **Real users** — each user pastes their **Nessie customer ID** in **Nessie account** (stored in `localStorage` only). Your server holds one Nessie API key; customer IDs scope data per user.
+## Running a production build locally
+
+```bash
+npm run build
+npm start
+```
+
+Default URL: **http://localhost:3000**. Health check: `GET /api/health`.
+
+Each user can paste their **Nessie customer ID** in **Nessie account** (stored in `localStorage` only). The server holds one Nessie API key; customer IDs scope data per user.
 
 ### Privacy
 
@@ -36,15 +42,17 @@ npm install
 npm run dev
 ```
 
-Offline demo:
+Offline storyboard demo (login → $1,000 by Dec 10 → star route → tips reroute):
 
 ```bash
-POLARIS_USE_FIXTURE=true npm run dev
+POLARIS_USE_FIXTURE=true NEXT_PUBLIC_USE_FIXTURES=true NEXT_PUBLIC_DEMO_MODE=true DEMO_MODE=true npm run dev
 ```
+
+See [docs/DEMO_SCENARIO.md](docs/DEMO_SCENARIO.md) for the full judge script.
 
 ## How it works
 
-1. **Demo login** — with `NESSIE_CUSTOMER_ID` or `POLARIS_USE_FIXTURE=true`, judges tap **Continue as Maya (demo)** (no password). Otherwise link a Nessie customer ID in the UI.
+1. **Demo login** — with `NESSIE_CUSTOMER_ID` or `POLARIS_USE_FIXTURE=true`, judges log in with the demo account **tyreikr11@cornell.edu** / **123456789** (override with `DEMO_LOGIN_EMAIL` / `DEMO_LOGIN_PASSWORD`). Otherwise link a Nessie customer ID in the UI.
 2. Set a savings destination (text or Grok Voice).
 3. `/api/sync` loads accounts, bills, purchases, deposits, transfers.
 4. **TypeScript projection** (`lib/projection`) computes ETA — not the LLM.
@@ -69,13 +77,9 @@ POLARIS_USE_FIXTURE=true npm run dev
 | `POST /api/chat` | Follow-up Q&A (chat history) |
 | `POST /api/imagine` | Destination image |
 | `POST /api/voice` | Grok Voice ephemeral token |
-| `GET /api/health` | Deploy health |
+| `GET /api/health` | App health |
 | `GET /api/config` | Public feature flags |
 
 ## Hackathon tracks
 
 Navigation theme, Cap One Nessie, Grok Voice + Imagine, constellation / SpaceX angle, Cursor-built codebase.
-
-## License
-
-MIT

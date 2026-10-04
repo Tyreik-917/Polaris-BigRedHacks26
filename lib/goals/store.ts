@@ -6,9 +6,32 @@ const customerGoalsKey = (customerId: string) => `goals:customer:${customerId}`;
 const seenTxKey = (goalId: string) => `goal:${goalId}:seen-tx`;
 const adjustmentsKey = (goalId: string) => `goal:${goalId}:adjustments`;
 
+export type ReportedIncomeEvent = {
+  date: string;
+  label: string;
+  amount: number;
+  description: string;
+};
+
+export type ReportedBill = {
+  payee: string;
+  amount: number;
+  dueDate: string;
+};
+
 export type GoalAdjustments = {
   reportedSpendTotal: number;
+  reportedIncomeTotal: number;
+  incomeEvents: ReportedIncomeEvent[];
+  extraBills: ReportedBill[];
 };
+
+const emptyAdjustments = (): GoalAdjustments => ({
+  reportedSpendTotal: 0,
+  reportedIncomeTotal: 0,
+  incomeEvents: [],
+  extraBills: [],
+});
 
 export async function saveGoal(goal: Goal): Promise<void> {
   await kvSet(goalKey(goal.id), goal);
@@ -64,11 +87,14 @@ export async function addSeenTransactionIds(
 export async function getGoalAdjustments(
   goalId: string,
 ): Promise<GoalAdjustments> {
-  return (
-    (await kvGet<GoalAdjustments>(adjustmentsKey(goalId))) ?? {
-      reportedSpendTotal: 0,
-    }
-  );
+  const raw = await kvGet<GoalAdjustments>(adjustmentsKey(goalId));
+  if (!raw) return emptyAdjustments();
+  return {
+    ...emptyAdjustments(),
+    ...raw,
+    incomeEvents: raw.incomeEvents ?? [],
+    extraBills: raw.extraBills ?? [],
+  };
 }
 
 export async function addReportedSpend(
@@ -77,7 +103,49 @@ export async function addReportedSpend(
 ): Promise<GoalAdjustments> {
   const prev = await getGoalAdjustments(goalId);
   const next = {
+    ...prev,
     reportedSpendTotal: prev.reportedSpendTotal + amount,
+  };
+  await kvSet(adjustmentsKey(goalId), next);
+  return next;
+}
+
+export async function addReportedIncome(
+  goalId: string,
+  amount: number,
+  meta: { description: string; label?: string },
+  ref: Date = new Date(),
+): Promise<GoalAdjustments> {
+  const prev = await getGoalAdjustments(goalId);
+  const date = ref.toISOString().slice(0, 10);
+  const label =
+    meta.label ??
+    (/tip/i.test(meta.description) ? "Tips" : meta.description.slice(0, 40));
+  const next: GoalAdjustments = {
+    ...prev,
+    reportedIncomeTotal: prev.reportedIncomeTotal + amount,
+    incomeEvents: [
+      ...prev.incomeEvents,
+      {
+        date,
+        label,
+        amount,
+        description: meta.description,
+      },
+    ],
+  };
+  await kvSet(adjustmentsKey(goalId), next);
+  return next;
+}
+
+export async function addReportedBill(
+  goalId: string,
+  bill: ReportedBill,
+): Promise<GoalAdjustments> {
+  const prev = await getGoalAdjustments(goalId);
+  const next = {
+    ...prev,
+    extraBills: [...prev.extraBills, bill],
   };
   await kvSet(adjustmentsKey(goalId), next);
   return next;

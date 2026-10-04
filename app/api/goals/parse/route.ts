@@ -33,15 +33,12 @@ export async function POST(request: Request) {
       targetAmount: goal.targetAmount,
       targetDate: goal.targetDate,
     });
-  } catch {
-    const heuristic = await parseGoalFromText(parsed.data.text);
-    if (heuristic) {
-      return NextResponse.json({
-        name: heuristic.label,
-        targetAmount: heuristic.targetAmount,
-        targetDate: heuristic.targetDate,
-      });
-    }
-    return jsonError("Goal parse unavailable.", 503);
+  } catch (e) {
+    // parseGoalFromText already tried the local heuristic before calling Grok.
+    console.error("[grok] goals/parse failed", e);
+    return jsonError(
+      'Couldn\'t understand that goal. Try "Save $400 for a flight home by Dec 15".',
+      503,
+    );
   }
 }

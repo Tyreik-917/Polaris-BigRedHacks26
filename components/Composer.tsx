@@ -2,6 +2,7 @@
 
 import { MicButton } from "@/components/MicButton";
 import { Send } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useId, type RefObject } from "react";
 
 type Props = {
@@ -11,6 +12,9 @@ type Props = {
   onMicToggle?: () => void;
   placeholder?: string;
   inputRef?: RefObject<HTMLInputElement | null>;
+  /** Blocks sending (e.g. while Polaris is replying); typing stays allowed. */
+  disabled?: boolean;
+  className?: string;
 };
 
 export function Composer({
@@ -20,16 +24,23 @@ export function Composer({
   onMicToggle,
   placeholder = "Message Polaris…",
   inputRef,
+  disabled = false,
+  className,
 }: Props) {
   const id = useId();
 
   return (
-    <div className="sticky bottom-0 border-t border-line bg-night/95 px-4 py-3 backdrop-blur-sm">
+    <div
+      className={cn(
+        "shrink-0 border-t border-line bg-night/95 px-4 py-3 backdrop-blur-sm",
+        className,
+      )}
+    >
       <form
         className="flex items-center gap-2"
         onSubmit={(e) => {
           e.preventDefault();
-          if (value.trim()) onSubmit();
+          if (value.trim() && !disabled) onSubmit();
         }}
       >
         <label htmlFor={id} className="sr-only">
@@ -47,7 +58,7 @@ export function Composer({
           type="submit"
           className="flex h-12 w-12 items-center justify-center rounded-xl border border-border bg-panel text-star disabled:opacity-40"
           aria-label="Send message"
-          disabled={!value.trim()}
+          disabled={!value.trim() || disabled}
         >
           <Send className="h-5 w-5" />
         </button>

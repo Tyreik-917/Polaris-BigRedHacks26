@@ -50,6 +50,13 @@ export function requireCustomerId(request: Request): string | NextResponse {
 type Bucket = { count: number; resetAt: number };
 
 const buckets = new Map<string, Bucket>();
+const MAX_BUCKETS = 10_000;
+
+function pruneBuckets(now: number) {
+  for (const [key, bucket] of buckets) {
+    if (now > bucket.resetAt) buckets.delete(key);
+  }
+}
 
 /** Best-effort rate limit for serverless (per instance). */
 export function rateLimit(
@@ -64,6 +71,7 @@ export function rateLimit(
     "anonymous";
   const bucketKey = `${key}:${ip}`;
   const now = Date.now();
+  if (buckets.size >= MAX_BUCKETS) pruneBuckets(now);
   let bucket = buckets.get(bucketKey);
   if (!bucket || now > bucket.resetAt) {
     bucket = { count: 0, resetAt: now + windowMs };

@@ -8,8 +8,11 @@ import {
   fixtureProjectionBefore,
   fixtureRouteEvents,
   resetFixtureScenario,
+  fixtureTipsPolarisReply,
   triggerFixturePurchase,
   triggerFixtureSamPayment,
+  triggerFixtureTips,
+  fixtureProjectionAfterTips,
 } from "@/lib/fixtures";
 import { loadGoal, saveGoal } from "@/lib/goal-storage";
 import { polarisFetch } from "@/lib/api/client-fetch";
@@ -46,36 +49,46 @@ function delay<T>(value: T, ms = FIXTURE_DELAY_MS): Promise<T> {
   });
 }
 
+/**
+ * Retries once on a network error or 5xx, but only for GETs: replaying a POST
+ * could create a second Nessie purchase or transfer.
+ */
 async function fetchWithRetry(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const attempts = method === "GET" ? 2 : 1;
   let last: Response | null = null;
-  for (let attempt = 0; attempt < 2; attempt++) {
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    const willRetry = attempt < attempts - 1;
     try {
       const res = await polarisFetch(input, init);
-      if (res.ok) return res;
+      if (res.ok || res.status < 500 || !willRetry) return res;
       last = res;
     } catch {
-      if (attempt === 0) {
-        toast.message("Polaris lost signal, retrying…");
-        continue;
-      }
-      throw new Error("Network error");
+      if (!willRetry) throw new Error("Network error");
     }
-    if (attempt === 0) {
-      toast.message("Polaris lost signal, retrying…");
-    }
+    toast.message("Polaris lost signal, retrying…");
   }
   return last!;
 }
 
-export async function demoLogin(): Promise<{ customerId: string | null }> {
-  if (useFixtures) {
+export async function demoLogin(credentials: {
+  email: string;
+  password: string;
+}): Promise<{ customerId: string | null }> {
+  // Credentials are always checked server-side, even in fixture mode.
+  const res = await fetchWithRetry("/api/session/demo", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(credentials),
+  });
+  if (useFixtures && (res.ok || res.status === 503)) {
+    // 503 = credentials accepted but no Nessie customer; fixtures don't need one.
     resetFixtureScenario();
     return delay({ customerId: "maya-demo" });
   }
-  const res = await fetchWithRetry("/api/session/demo", { method: "POST" });
   if (!res.ok) throw new Error(await readApiError(res));
   const data = (await res.json()) as { customerId: string | null };
   return { customerId: data.customerId };
@@ -107,9 +120,9 @@ export async function fetchOverview(goalId: string): Promise<Overview> {
 export async function parseGoalText(text: string): Promise<ParsedGoalDraft> {
   if (useFixtures) {
     return delay({
-      name: "Flight home",
-      targetAmount: 400,
-      targetDate: "2026-12-15",
+      name: "Save $1,000",
+      targetAmount: 1000,
+      targetDate: "2026-12-10",
     });
   }
   const res = await fetchWithRetry("/api/goals/parse", {
@@ -120,6 +133,40 @@ export async function parseGoalText(text: string): Promise<ParsedGoalDraft> {
   if (!res.ok) throw new Error(await readApiError(res));
   const data = (await res.json()) as ParsedGoalDraft;
   return data;
+}
+
+export type DestinationChatTurn = { role: "user" | "assistant"; content: string };
+
+export async function chatDestination(
+  messages: DestinationChatTurn[],
+): Promise<{ reply: string; goal: ParsedGoalDraft | null }> {
+  if (useFixtures) {
+    const last = messages[messages.length - 1]?.content ?? "";
+    if (/1,?000/.test(last) && /dec(ember)?\s*10/i.test(last)) {
+      return delay({
+        reply:
+          "Destination set. I checked your Capital One accounts, your bills and your paydays.",
+        goal: {
+          name: "Save $1,000",
+          targetAmount: 1000,
+          targetDate: "2026-12-10",
+        },
+      });
+    }
+    return delay({
+      reply:
+        'Tell me something like "Save $1,000 by December 10th" or tap "$1,000 by Dec 10" below.',
+      goal: null,
+    });
+  }
+  // Not retried: it's a POST, and a slow Grok reply shouldn't be sent twice.
+  const res = await polarisFetch("/api/goals/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ messages }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  return (await res.json()) as { reply: string; goal: ParsedGoalDraft | null };
 }
 
 export async function createGoal(draft: ParsedGoalDraft): Promise<Goal> {
@@ -201,33 +248,98 @@ export async function fetchPostcard(goalId: string): Promise<PostcardResponse> {
   return (await res.json()) as PostcardResponse;
 }
 
-export async function reportPurchase(
+export type RouteChatResult = {
+  reply: string;
+  /** Set when the message was a purchase that was logged. */
+  event: RouteEventRecord | null;
+  projection: Projection | null;
+};
+
+export async function routeChat(
   goalId: string,
-  text: string,
-): Promise<void> {
+  messages: DestinationChatTurn[],
+): Promise<RouteChatResult> {
   if (useFixtures) {
-    void goalId;
-    void text;
-    triggerFixturePurchase();
-    return delay(undefined);
+    const last = messages[messages.length - 1]?.content ?? "";
+    if (/tip/i.test(last) || /\$85/.test(last)) {
+      triggerFixtureTips();
+      return delay({
+        reply: fixtureTipsPolarisReply,
+        event: {
+          id: "chat-tips-85",
+          type: "income_reported",
+          description: "Tips deposited to checking",
+          amount: 85,
+          previousEta: fixtureProjectionBefore.eta,
+          newEta: fixtureProjectionAfterTips.eta,
+          account: "Capital One checking",
+          previousWaypoints: fixtureProjectionBefore.waypoints,
+          projection: fixtureProjectionAfterTips,
+        },
+        projection: fixtureProjectionAfterTips,
+      });
+    }
+    if (/\$\s*\d/.test(last) && /spent|bought|purchase/i.test(last)) {
+      triggerFixturePurchase();
+      return delay({
+        reply: "Logged it. Watch the route update.",
+        event: null,
+        projection: null,
+      });
+    }
+    return delay({
+      reply:
+        'Try "I made $85 in tips at work tonight!" to see a faster route, or tell me about a purchase.',
+      event: null,
+      projection: null,
+    });
   }
-  const res = await fetchWithRetry(`/api/goals/${goalId}/report`, {
+  // Not retried: a replayed purchase would be logged twice.
+  const res = await polarisFetch(`/api/goals/${goalId}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text }),
+    body: JSON.stringify({ messages }),
   });
   if (!res.ok) throw new Error(await readApiError(res));
+  const data = (await res.json()) as {
+    reply: string;
+    event: Omit<RouteEventRecord, "id"> | null;
+    projection: Projection | null;
+  };
+  return {
+    reply: data.reply,
+    event: data.event
+      ? {
+          ...data.event,
+          id: `chat-${crypto.randomUUID()}`,
+          projection: data.projection ?? undefined,
+        }
+      : null,
+    projection: data.projection,
+  };
 }
 
-export async function applyMove(moveId: string): Promise<void> {
+export async function applyMove(moveId: string): Promise<Projection | null> {
   if (useFixtures) {
     void moveId;
-    return delay(undefined);
+    return delay(null);
   }
   const res = await fetchWithRetry(`/api/moves/${moveId}/apply`, {
     method: "POST",
   });
   if (!res.ok) throw new Error(await readApiError(res));
+  const data = (await res.json()) as { projection: Projection | null };
+  return data.projection;
+}
+
+export async function demoTips(): Promise<void> {
+  if (useFixtures) {
+    triggerFixtureTips();
+    return delay(undefined);
+  }
+  await fetchWithRetry("/api/demo/tips", { method: "POST" }).catch(() => {
+    triggerFixtureTips();
+  });
 }
 
 export async function demoPurchase(): Promise<void> {
@@ -235,11 +347,12 @@ export async function demoPurchase(): Promise<void> {
     triggerFixturePurchase();
     return delay(undefined);
   }
-  await fetchWithRetry("/api/demo/purchase", {
+  const res = await fetchWithRetry("/api/demo/purchase", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ merchant: "Chipotle", amount: 32.4 }),
   });
+  if (!res.ok) throw new Error(await readApiError(res));
 }
 
 export async function demoReset(): Promise<void> {
@@ -248,7 +361,8 @@ export async function demoReset(): Promise<void> {
     resetSeenRouteEvents();
     return delay(undefined);
   }
-  await fetchWithRetry("/api/demo/reset", { method: "POST" });
+  const res = await fetchWithRetry("/api/demo/reset", { method: "POST" });
+  if (!res.ok) throw new Error(await readApiError(res));
   resetSeenRouteEvents();
 }
 
@@ -257,9 +371,8 @@ export async function demoSamPay(): Promise<void> {
     triggerFixtureSamPayment();
     return delay(undefined);
   }
-  await fetchWithRetry("/api/demo/sam-pay", { method: "POST" }).catch(() => {
-    triggerFixtureSamPayment();
-  });
+  const res = await fetchWithRetry("/api/demo/sam-pay", { method: "POST" });
+  if (!res.ok) throw new Error(await readApiError(res));
 }
 
 export function projectionKey(goalId: string) {
@@ -268,6 +381,11 @@ export function projectionKey(goalId: string) {
 
 export function eventsKey(goalId: string, since: string) {
   return ["route-events", goalId, since] as const;
+}
+
+/** Matches every route-events query for a goal, whatever its `since`. */
+export function allEventsKey(goalId: string) {
+  return ["route-events", goalId] as const;
 }
 
 export function useDemoLogin() {
@@ -285,7 +403,10 @@ export function useOverview(goalId: string | undefined) {
 export function useCreateGoal() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (input: { text: string; skipParse?: boolean }) => {
+    mutationFn: async (
+      input: { draft: ParsedGoalDraft } | { text: string; skipParse?: boolean },
+    ) => {
+      if ("draft" in input) return createGoal(input.draft);
       const draft = input.skipParse
         ? ({
             name: input.text,
@@ -363,25 +484,26 @@ export function usePostcard(goalId: string | undefined) {
     queryFn: () => fetchPostcard(goalId!),
     enabled: Boolean(goalId),
     refetchInterval: (query) =>
-      query.state.data?.status === "ready" ? false : 3000,
+      !query.state.data || query.state.data.status === "pending"
+        ? 3000
+        : false,
   });
 }
 
-export function useReportPurchase(goalId: string) {
+export function useApplyMove(goalId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (text: string) => reportPurchase(goalId, text),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: eventsKey(goalId, "") });
-    },
-  });
-}
-
-export function useApplyMove(_goalId: string) {
-  return useMutation({
     mutationFn: applyMove,
-    onSuccess: (_data, moveId) => {
+    onSuccess: (projection, moveId) => {
       useUIStore.getState().markMoveApplied(moveId);
+      if (projection) {
+        qc.setQueryData(projectionKey(goalId), projection);
+      } else {
+        void qc.invalidateQueries({ queryKey: projectionKey(goalId) });
+      }
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : "Couldn't apply that move.");
     },
   });
 }

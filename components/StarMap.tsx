@@ -3,14 +3,17 @@
 import { NextMoveCallout } from "@/components/NextMoveCallout";
 import type { Goal, Projection, Waypoint } from "@/lib/types";
 import {
+  curveToPath,
   enrichWaypointsForMap,
   layoutWaypoints,
   MAP,
+  normalOnCurve,
+  routeCurve,
+  splitCurve,
   STAR_FIELD_DOTS,
   type MapPoint,
 } from "@/lib/map-coords";
 import { formatMonDay, formatUsd } from "@/lib/format";
-import { line, curveCatmullRom } from "d3-shape";
 import { motion, useReducedMotion } from "framer-motion";
 import { useMemo, useState } from "react";
 
@@ -43,15 +46,22 @@ function labelForWaypoint(w: Waypoint): string {
   return `${w.label} · ${formatMonDay(w.date)}`;
 }
 
-function buildPath(points: MapPoint[]): string | null {
-  if (points.length < 2) return null;
-  const coords = points.map((p) => [p.x, p.y] as [number, number]);
-  return (
-    line<[number, number]>()
-      .x((d) => d[0])
-      .y((d) => d[1])
-      .curve(curveCatmullRom.alpha(0.75))(coords) ?? null
-  );
+const ROUTE = routeCurve(1);
+
+const LABEL_OFFSET = 16;
+const LABEL_CHAR_WIDTH = 6.2;
+
+/** Label on the left of travel, anchored away from the path and kept on-canvas. */
+function labelPlacement(pt: MapPoint, text: string) {
+  const n = normalOnCurve(ROUTE, pt.t);
+  const anchor: "start" | "middle" | "end" =
+    Math.abs(n.x) < 0.35 ? "middle" : n.x > 0 ? "start" : "end";
+  const width = text.length * LABEL_CHAR_WIDTH;
+  let x = pt.x + n.x * LABEL_OFFSET;
+  const left = anchor === "end" ? x - width : anchor === "middle" ? x - width / 2 : x;
+  if (left < 6) x += 6 - left;
+  if (left + width > MAP.width - 6) x -= left + width - (MAP.width - 6);
+  return { x, y: pt.y + n.y * LABEL_OFFSET + 4, anchor };
 }
 
 function todayIsoLocal(): string {
@@ -75,40 +85,41 @@ export function StarMap({
   const [introDone, setIntroDone] = useState(false);
   const todayIso = todayIsoLocal();
 
-  const endDate = projection.eta ?? goal.targetDate;
+  // A late ETA stretches the trip; with no ETA, the route ends at the target date.
+  const endDate =
+    projection.eta && projection.eta > goal.targetDate
+      ? projection.eta
+      : goal.targetDate;
   const routeWaypoints = useMemo(
-    () => enrichWaypointsForMap(projection.waypoints, goal, todayIso),
-    [projection.waypoints, goal, todayIso],
+    () => enrichWaypointsForMap(projection.waypoints, goal, todayIso, endDate),
+    [projection.waypoints, goal, todayIso, endDate],
   );
 
-  const startDate = routeWaypoints[0]?.date ?? goal.createdAt.slice(0, 10);
+  const startDate = routeWaypoints[0]?.date ?? todayIso;
 
   const points = useMemo(
-    () => layoutWaypoints(routeWaypoints, startDate, endDate),
+    () => layoutWaypoints(routeWaypoints, startDate, endDate, ROUTE),
     [routeWaypoints, startDate, endDate],
   );
 
-  const oldRouteWaypoints = useMemo(() => {
-    if (!previousWaypoints?.length) return null;
-    return enrichWaypointsForMap(previousWaypoints, goal, todayIso);
-  }, [previousWaypoints, goal, todayIso]);
-
-  const oldPoints = useMemo(() => {
-    if (!oldRouteWaypoints) return null;
-    return layoutWaypoints(oldRouteWaypoints, startDate, endDate);
-  }, [oldRouteWaypoints, startDate, endDate]);
-
   const youIndex = points.findIndex((p) => p.waypoint.label === "You");
-  const safeYouIndex = youIndex >= 0 ? youIndex : Math.max(0, points.length - 2);
+  const youPoint = points[Math.max(0, youIndex)];
+  const youT = youPoint?.t ?? 0;
 
-  const passedPath = buildPath(points.slice(0, safeYouIndex + 1));
-  const aheadPath = buildPath(points.slice(safeYouIndex));
+  const [passedCurve, aheadCurve] = splitCurve(ROUTE, youT);
+  const passedPath = youT > 0 ? curveToPath(passedCurve) : null;
+  const aheadPath = curveToPath(aheadCurve);
+  // Before the reroute the way ahead was more direct: a wider, gentler arc from
+  // You that still meets the star from the left (clear of the postcard below it).
   const oldAheadPath =
-    oldPoints && safeYouIndex >= 0
-      ? buildPath(oldPoints.slice(safeYouIndex))
+    previousWaypoints?.length && youPoint
+      ? curveToPath([
+          youPoint,
+          { x: youPoint.x + 170, y: youPoint.y - 20 },
+          { x: MAP.goal.x - 110, y: MAP.goal.y + 10 },
+          MAP.goal,
+        ])
       : null;
-
-  const youPoint = points[safeYouIndex];
 
   const showLegend = reroutePhase !== "none" && oldAheadPath;
   const oldGray =
@@ -118,14 +129,12 @@ export function StarMap({
 
   const mapSummary = `Route to ${goal.name}, ${points.filter((p) => p.waypoint.status === "passed").length} of ${points.length} checkpoints passed, ETA ${projection.eta ? formatMonDay(projection.eta) : "unknown"}`;
 
-  const calloutX = Math.min(
-    Math.max(youPoint.x + 14, 8),
-    MAP.width - 168,
-  );
-  const calloutY = Math.max(youPoint.y - 78, 36);
+  // The S-curve leaves the bottom-right corner empty; park the callout there.
+  const calloutX = MAP.width - 176;
+  const calloutY = MAP.height - 92;
 
   return (
-    <div className="relative min-h-[320px] flex-1 bg-sky">
+    <div className="relative h-full min-h-[240px] flex-1 bg-sky">
       <svg
         viewBox={`0 0 ${MAP.width} ${MAP.height}`}
         className="h-full w-full"
@@ -154,6 +163,9 @@ export function StarMap({
           style={{ textTransform: "uppercase" }}
         >
           Follow the stars
+        </text>
+        <text x={16} y={40} fill="#A9B1CC" fontSize={11} opacity={0.85}>
+          Tap a star for details
         </text>
 
         {showLegend && (
@@ -271,12 +283,12 @@ export function StarMap({
                   fill="#F5C451"
                 />
                 <foreignObject
-                  x={pt.x + 12}
-                  y={pt.y - 20}
+                  x={pt.x - 47}
+                  y={pt.y + 30}
                   width={94}
-                  height={80}
+                  height={84}
                 >
-                  <div className="flex flex-col items-start">
+                  <div className="flex flex-col items-center">
                     {postcardPending || !postcardUrl ? (
                       <div className="h-[62px] w-[94px] rounded-lg border border-dashed border-border bg-panel/80" />
                     ) : (
@@ -297,15 +309,24 @@ export function StarMap({
             );
           }
 
-          const labelLeft = pt.x > MAP.width / 2;
+          const labelText = labelForWaypoint(w);
+          const label = labelPlacement(pt, labelText);
 
           return (
             <g key={`${w.date}-${w.label}-${i}`}>
-              <button
-                type="button"
-                className="focus:outline-none"
-                aria-label={labelForWaypoint(w)}
+              {/* <button> isn't an SVG element and renders nothing here; use an accessible <g>. */}
+              <g
+                role="button"
+                tabIndex={0}
+                className="cursor-pointer focus:outline-none"
+                aria-label={isYou ? "You are here" : labelText}
                 onClick={() => onWaypointOpen?.(w)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onWaypointOpen?.(w);
+                  }
+                }}
               >
                 {isYou ? (
                   <>
@@ -328,16 +349,16 @@ export function StarMap({
                     opacity={lit ? 1 : 0.9}
                   />
                 )}
-              </button>
+              </g>
               {!isYou && (
                 <text
-                  x={labelLeft ? pt.x - 10 : pt.x + 10}
-                  y={pt.y + (i % 2 === 0 ? -14 : 20)}
-                  textAnchor={labelLeft ? "end" : "start"}
+                  x={label.x}
+                  y={label.y}
+                  textAnchor={label.anchor}
                   fill="#A9B1CC"
                   fontSize={12}
                 >
-                  {labelForWaypoint(w)}
+                  {labelText}
                 </text>
               )}
             </g>

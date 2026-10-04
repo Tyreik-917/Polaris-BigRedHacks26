@@ -2,7 +2,6 @@ import { jsonError, rateLimit } from "@/lib/api/http";
 import { requireSessionCustomerId } from "@/lib/api/require-customer";
 import { demoGuard } from "@/lib/demo/mode";
 import { resetCustomerState } from "@/lib/goals/store";
-import { resolveMayaCustomerId } from "@/lib/seed-ids";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
@@ -17,8 +16,7 @@ export async function POST(request: Request) {
   const customerId = requireSessionCustomerId(request);
   if (customerId instanceof NextResponse) return customerId;
 
-  const mayaId = resolveMayaCustomerId() ?? customerId;
-  await resetCustomerState(mayaId);
+  await resetCustomerState(customerId);
 
   return NextResponse.json({
     ok: true,

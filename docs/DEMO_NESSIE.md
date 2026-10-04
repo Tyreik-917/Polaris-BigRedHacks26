@@ -17,7 +17,7 @@ Nessie customers are tied to **your** Capital One hackathon API key. Polaris can
    - `NESSIE_CUSTOMER_ID` in `.env.local`
    - `demo-nessie.credentials.json` (gitignored)
 
-5. Start the app: `npm run dev`, tap **Continue as Maya (demo)**, and set a goal like **$400 flight home**.
+5. Start the app: `npm run dev`, log in with **tyreikr11@cornell.edu** / **123456789**, and set a goal like **$400 flight home**.
 
 ## Option B — No Nessie key yet (offline)
 

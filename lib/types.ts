@@ -41,7 +41,11 @@ export type Projection = {
 };
 
 export type RouteEvent = {
-  type: "purchase_detected" | "user_reported" | "transfer_received";
+  type:
+    | "purchase_detected"
+    | "user_reported"
+    | "income_reported"
+    | "transfer_received";
   description: string;
   amount: number;
   previousEta: string | null;
@@ -64,11 +68,25 @@ export type Overview = {
   checking: number;
   savings: number;
   billsBeforeTarget: number;
+  /** Weekly food spend (display as $X / wk). */
   foodSpending: number;
+  paycheckIntervalLabel?: string;
+  paycheckAmount?: number;
+};
+
+export type WaypointCheckpoint = {
+  checkpointIndex: number;
+  checkpointTotal: number;
+  imagineUrl?: string;
+  inspireLine?: string;
+  comingIn?: { label: string; amount: number }[];
+  dueBeforeNext?: { label: string; amount: number }[];
+  savedTowardGoal?: number;
 };
 
 export type PostcardResponse = {
-  status: "pending" | "ready";
+  /** "fallback": generation failed or timed out; url is the stock postcard. */
+  status: "pending" | "ready" | "fallback";
   url?: string;
 };
 

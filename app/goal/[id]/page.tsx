@@ -5,32 +5,61 @@ import { AppHeader } from "@/components/AppHeader";
 import { ChatBubble } from "@/components/ChatBubble";
 import { PageTransition } from "@/components/PageTransition";
 import { PhoneFrame } from "@/components/PhoneFrame";
-import { useOverview, useProjection } from "@/lib/api";
-import { loadGoal } from "@/lib/goal-storage";
-import { fixtureGoal } from "@/lib/fixtures";
+import { GoalMissing } from "@/components/GoalMissing";
+import { useFixtures, useOverview, useProjection } from "@/lib/api";
+import { formatMonDay } from "@/lib/format";
+import { useStoredGoal } from "@/lib/goal-storage";
+import {
+  fixtureGoal,
+  fixtureGoalSetUserLine,
+  fixturePolarisRouteMessage,
+} from "@/lib/fixtures";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useMemo } from "react";
 
 export default function GoalSetPage() {
   const params = useParams();
   const id = String(params.id);
-  const goal = useMemo(() => loadGoal(id) ?? { ...fixtureGoal, id }, [id]);
+  const stored = useStoredGoal(id);
+  const goal = stored.goal ?? (useFixtures ? { ...fixtureGoal, id } : null);
   const overview = useOverview(id);
   const projection = useProjection(id);
+
+  if (!stored.hydrated) {
+    return (
+      <PhoneFrame>
+        <div className="flex flex-1 items-center justify-center text-muted">
+          Loading…
+        </div>
+      </PhoneFrame>
+    );
+  }
+  if (!goal || projection.isError) {
+    return (
+      <GoalMissing
+        message={
+          projection.error
+            ? `Couldn't load your route: ${projection.error.message}`
+            : undefined
+        }
+      />
+    );
+  }
 
   return (
     <PhoneFrame>
       <PageTransition>
         <AppHeader />
         <div className="flex flex-1 flex-col gap-4 overflow-y-auto px-4 py-4">
-          <ChatBubble from="user" spokenDurationSec={4}>
-            {`Save $${goal.targetAmount} for ${goal.name} by ${goal.targetDate}`}
+          <ChatBubble from="user" spokenDurationSec={5}>
+            {useFixtures
+              ? fixtureGoalSetUserLine
+              : `I want to save $${goal.targetAmount} by ${formatMonDay(goal.targetDate)}.`}
           </ChatBubble>
 
           <ChatBubble from="polaris">
-            Destination set. I checked your Capital One accounts to plan the
-            route.
+            Destination set. I checked your Capital One accounts, your bills
+            and your paydays.
           </ChatBubble>
 
           {overview.data && projection.data && (
@@ -68,16 +97,13 @@ export default function GoalSetPage() {
             />
           )}
 
-          <ChatBubble from="polaris">
-            Good news: a few small moves get you there on time. Ready for
-            directions?
-          </ChatBubble>
+          <ChatBubble from="polaris">{fixturePolarisRouteMessage}</ChatBubble>
 
           <Link
             href={`/route/${id}`}
             className="flex h-[52px] items-center justify-center rounded-xl bg-star text-[16px] font-semibold text-star-ink"
           >
-            Show my route
+            Show my star route
           </Link>
         </div>
       </PageTransition>

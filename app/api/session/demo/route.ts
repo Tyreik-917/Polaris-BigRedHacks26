@@ -1,5 +1,6 @@
-import { jsonError, rateLimit } from "@/lib/api/http";
+import { jsonError, parseJsonBody, rateLimit } from "@/lib/api/http";
 import { setCustomerSession } from "@/lib/api/session";
+import { isDemoCredentials } from "@/lib/demo/credentials";
 import { DEMO_PERSONA } from "@/lib/demo/persona";
 import { getServerConfig, isDemoLoginAvailable } from "@/lib/env.server";
 import { resolveMayaCustomerId } from "@/lib/seed-ids";
@@ -10,6 +11,15 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   const limited = rateLimit(request, "session-demo", 20, 60_000);
   if (limited) return limited;
+
+  const body = await parseJsonBody<{ email?: unknown; password?: unknown }>(
+    request,
+  );
+  if (body instanceof NextResponse) return body;
+
+  if (!isDemoCredentials(body.email, body.password)) {
+    return jsonError("Incorrect email or password.", 401);
+  }
 
   const cfg = getServerConfig();
   const customerId = resolveMayaCustomerId() ?? cfg.defaultCustomerId;
@@ -22,13 +32,11 @@ export async function POST(request: Request) {
   }
 
   const id = customerId ?? "000000000000000000000000";
-  const body = {
+  const res = NextResponse.json({
     customerId: cfg.useFixture ? null : id,
     name: DEMO_PERSONA.fullName,
     fixtureMode: cfg.useFixture,
-  };
-
-  const res = NextResponse.json(body);
+  });
   if (!cfg.useFixture && customerId) {
     setCustomerSession(res, customerId);
   }

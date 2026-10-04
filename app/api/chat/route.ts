@@ -3,12 +3,13 @@ import { jsonError, parseJsonBody, rateLimit, requireCustomerId } from "@/lib/ap
 import { answerPolarisQuestion } from "@/lib/grok/chat-follow-up";
 import { parseGoalInput } from "@/lib/goals/types";
 import { loadFinancialSnapshot } from "@/lib/nessie/load-snapshot";
-import type { FinancialSnapshot } from "@/lib/nessie/types";
 import { projectGoal } from "@/lib/projection/engine";
-import type { ProjectionResult } from "@/lib/projection/engine";
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
+
+const MAX_HISTORY = 10;
+const MAX_DIRECTION_LINES = 20;
 
 export async function POST(request: Request) {
   const limited = rateLimit(request, "chat", 40);
@@ -20,8 +21,6 @@ export async function POST(request: Request) {
   const body = await parseJsonBody<{
     question?: string;
     goal?: unknown;
-    snapshot?: FinancialSnapshot;
-    projection?: ProjectionResult;
     directionLines?: string[];
     history?: ChatMessage[];
   }>(request);
@@ -40,14 +39,27 @@ export async function POST(request: Request) {
   }
 
   try {
-    const snapshot =
-      body.snapshot ?? (await loadFinancialSnapshot(customerId));
-    const projection =
-      body.projection ?? projectGoal(goal, snapshot);
+    // Always load balances server-side: the model must only cite real numbers.
+    const snapshot = await loadFinancialSnapshot(customerId);
+    const projection = projectGoal(goal, snapshot);
     const directionLines = Array.isArray(body.directionLines)
-      ? body.directionLines.filter((l): l is string => typeof l === "string")
+      ? body.directionLines
+          .filter((l): l is string => typeof l === "string")
+          .slice(0, MAX_DIRECTION_LINES)
+          .map((l) => l.slice(0, 300))
       : [];
-    const history = Array.isArray(body.history) ? body.history : [];
+    const history = Array.isArray(body.history)
+      ? body.history
+          .filter(
+            (m): m is ChatMessage =>
+              Boolean(m) &&
+              typeof m === "object" &&
+              (m.role === "user" || m.role === "assistant") &&
+              typeof m.content === "string",
+          )
+          .slice(-MAX_HISTORY)
+          .map((m) => ({ ...m, content: m.content.slice(0, 2000) }))
+      : [];
 
     const reply = await answerPolarisQuestion(
       {

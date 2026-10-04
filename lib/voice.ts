@@ -1,12 +1,18 @@
 "use client";
 
+import { createGoal, parseGoalText } from "@/lib/api";
 import { polarisFetch } from "@/lib/api/client-fetch";
+import { readApiError } from "@/lib/api/read-error";
+import { loadAnyGoal } from "@/lib/goal-storage";
 import { useUIStore } from "@/lib/store";
 import type { ChatMessage } from "@/lib/types";
 
 type VoiceCallbacks = {
   onGoalCreated?: (goalId: string) => void;
-  onReportPurchase?: () => void;
+  /** Receives what the user said, e.g. "I spent $30 on a textbook". */
+  onReportPurchase?: (text: string) => void;
+  /** When set, the transcript is handed to the caller (e.g. a chat) instead of handled here. */
+  onUtterance?: (text: string) => void;
 };
 
 let activeSocket: WebSocket | null = null;
@@ -41,9 +47,12 @@ export async function startVoiceSession(
 
   store.setVoiceState("connecting");
 
-  const useFallback = process.env.NEXT_PUBLIC_VOICE_MODE === "fallback";
+  // The realtime (Grok Voice WebSocket) client below is incomplete: it never
+  // streams mic audio, sends session instructions, or plays replies. Browser
+  // speech recognition is the default until that lands.
+  const useRealtime = process.env.NEXT_PUBLIC_VOICE_MODE === "realtime";
 
-  if (useFallback) {
+  if (!useRealtime) {
     await runFallbackVoice(mode, callbacks);
     return;
   }
@@ -156,19 +165,14 @@ async function runFallbackVoice(
     if (!text) return;
     useUIStore.getState().setVoiceState("thinking");
     pushUserTranscript(text, 4);
-    void (async () => {
-      const res = await polarisFetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, mode }),
+    void handleUtterance(mode, text, callbacks)
+      .then(() => useUIStore.getState().setVoiceState("idle"))
+      .catch((e: unknown) => {
+        pushPolarisTranscript(
+          e instanceof Error ? e.message : "Sorry, I didn't catch that.",
+        );
+        useUIStore.getState().setVoiceState("error");
       });
-      if (res.ok) {
-        const data = (await res.json()) as { reply?: string };
-        if (data.reply) pushPolarisTranscript(data.reply);
-      }
-      if (mode === "report_spending") callbacks.onReportPurchase?.();
-      useUIStore.getState().setVoiceState("idle");
-    })();
   };
 
   recognition.onerror = () => {
@@ -176,4 +180,48 @@ async function runFallbackVoice(
   };
 
   recognition.start();
+}
+
+async function handleUtterance(
+  mode: "set_goal" | "report_spending" | "chat",
+  text: string,
+  callbacks: VoiceCallbacks,
+) {
+  if (callbacks.onUtterance) {
+    callbacks.onUtterance(text);
+    return;
+  }
+
+  if (mode === "set_goal") {
+    const goal = await createGoal(await parseGoalText(text));
+    pushPolarisTranscript(`Destination set: ${goal.name}. Plotting your route.`);
+    callbacks.onGoalCreated?.(goal.id);
+    return;
+  }
+
+  if (mode === "report_spending") {
+    callbacks.onReportPurchase?.(text);
+    return;
+  }
+
+  const goal = loadAnyGoal();
+  if (!goal) {
+    pushPolarisTranscript("Set a destination first, then ask me anything.");
+    return;
+  }
+  const res = await polarisFetch("/api/chat", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      question: text,
+      goal: {
+        label: goal.name,
+        targetAmount: goal.targetAmount,
+        targetDate: goal.targetDate,
+      },
+    }),
+  });
+  if (!res.ok) throw new Error(await readApiError(res));
+  const data = (await res.json()) as { reply?: string };
+  if (data.reply) pushPolarisTranscript(data.reply);
 }
