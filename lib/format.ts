@@ -2,7 +2,11 @@
 
 export function formatUsd(amount: number): string {
   const abs = Math.abs(amount);
-  const text = `$${abs.toFixed(abs % 1 === 0 ? 0 : 2)}`;
+  const digits = abs % 1 === 0 ? 0 : 2;
+  const text = `$${abs.toLocaleString("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  })}`;
   return amount < 0 ? `−${text}` : text;
 }
 

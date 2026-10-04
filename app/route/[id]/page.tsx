@@ -132,6 +132,7 @@ export default function RoutePage() {
 
       const faster =
         event.type === "income_reported" ||
+        event.type === "income_expected" ||
         (event.previousEta != null &&
           newEta != null &&
           newEta < event.previousEta);
@@ -260,6 +261,7 @@ export default function RoutePage() {
       <PageTransition>
         <AppHeader
           rerouting={rerouting && !recovered}
+          rerouteFaster={rerouteFaster}
           recovered={recovered}
           onAvatarPress={() => {
             if (DEMO_MODE) setDemoPanelOpen(true);
@@ -271,6 +273,11 @@ export default function RoutePage() {
           rerouting={rerouting}
           rerouteFaster={rerouteFaster}
           previousEta={previousEta}
+          previousSaved={
+            rerouteFaster && activeEvent?.type === "income_reported"
+              ? projection.saved - activeEvent.amount
+              : null
+          }
         />
 
         <RouteSplitPane
@@ -286,6 +293,7 @@ export default function RoutePage() {
               }
               nextMove={projection.nextMove}
               onWaypointOpen={setSheetWaypoint}
+              selectedWaypoint={sheetWaypoint}
               onSpeakNextMove={() => {
                 void startVoiceSession("chat", {
                   onUtterance: (t) => void sendChat(t),
@@ -296,7 +304,7 @@ export default function RoutePage() {
           right={
             <div className="flex min-h-0 flex-1 flex-col">
               {activeEvent && rerouting && (
-                <div className="shrink-0 border-b border-line px-2 py-2">
+                <div className="shrink-0 border-b border-line px-4 py-2">
                   <EventCard event={activeEvent} />
                 </div>
               )}
@@ -352,6 +360,7 @@ export default function RoutePage() {
 
         {sheetWaypoint && goal && (
           <WaypointCheckpointSheet
+            key={`${sheetWaypoint.date}|${sheetWaypoint.label}`}
             waypoint={sheetWaypoint}
             goal={goal}
             onClose={() => setSheetWaypoint(null)}

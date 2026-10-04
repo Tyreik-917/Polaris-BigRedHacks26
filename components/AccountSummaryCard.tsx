@@ -3,6 +3,7 @@
 import type { Goal, Overview, Projection } from "@/lib/types";
 import { formatMonDay, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import { Clock } from "lucide-react";
 
 type Props = {
   goal: Goal;
@@ -35,73 +36,85 @@ export function AccountSummaryCard({
   }
 
   const stripOnTrack = projection.onTrack;
-  const stripText = stripOnTrack
-    ? `On track, arriving ${projection.eta ? formatMonDay(projection.eta) : formatMonDay(goal.targetDate)}.`
-    : projection.eta
-      ? `ETA ${formatMonDay(projection.eta)}, ${projection.daysLate} days late at your current pace.`
-      : "Not at this pace for your goal date.";
+
+  const stats: { label: string; value: string }[] = [
+    { label: "Checking", value: formatCents(overview.checking) },
+    { label: "Savings", value: formatCents(overview.savings) },
+    {
+      label: `Bills before ${formatMonDay(goal.targetDate)}`,
+      value: formatUsd(overview.billsBeforeTarget),
+    },
+    { label: "Food spending", value: `${formatUsd(overview.foodSpending)} / wk` },
+  ];
+  if (overview.paycheckIntervalLabel) {
+    stats.push({ label: "Paydays", value: overview.paycheckIntervalLabel });
+  }
+  if (overview.paycheckAmount != null && overview.paycheckAmount > 0) {
+    stats.push({
+      label: "Each paycheck",
+      value: formatUsd(overview.paycheckAmount),
+    });
+  }
 
   return (
-    <article className="rounded-2xl border border-border bg-card p-4">
-      <header className="flex items-baseline justify-between gap-2">
+    <article className="overflow-hidden rounded-2xl border border-border bg-card">
+      <header className="flex items-baseline justify-between gap-2 border-b border-line px-4 py-3.5">
         <h2 className="font-heading text-[17px] font-bold text-ink">
-          {formatUsd(goal.targetAmount)} by {formatMonDay(goal.targetDate)}
+          {goal.name}
         </h2>
+        <p className="text-[14px] text-muted">
+          by {formatMonDay(goal.targetDate)}
+        </p>
       </header>
-      <div className="mt-4 grid grid-cols-2 gap-3 text-[13px]">
-        <div className="rounded-xl bg-panel px-3 py-2">
-          <p className="text-muted">Checking</p>
-          <p className="mt-1 font-medium tabular-nums text-ink">
-            {formatUsd(overview.checking)}
-          </p>
-        </div>
-        <div className="rounded-xl bg-panel px-3 py-2">
-          <p className="text-muted">Savings</p>
-          <p className="mt-1 font-medium tabular-nums text-ink">
-            {formatUsd(overview.savings)}
-          </p>
-        </div>
-        <div className="rounded-xl bg-panel px-3 py-2">
-          <p className="text-muted">
-            Bills before {formatMonDay(goal.targetDate)}
-          </p>
-          <p className="mt-1 font-medium tabular-nums text-ink">
-            {formatUsd(overview.billsBeforeTarget)}
-          </p>
-        </div>
-        <div className="rounded-xl bg-panel px-3 py-2">
-          <p className="text-muted">Food spending</p>
-          <p className="mt-1 font-medium tabular-nums text-ink">
-            {formatUsd(overview.foodSpending)} / wk
-          </p>
-        </div>
-        {overview.paycheckIntervalLabel && (
-          <div className="rounded-xl bg-panel px-3 py-2">
-            <p className="text-muted">Paydays</p>
-            <p className="mt-1 font-medium text-ink">
-              {overview.paycheckIntervalLabel}
-            </p>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-3 px-4 py-3 text-[13px]">
+        {stats.map((s) => (
+          <div key={s.label} className="flex flex-col gap-0.5">
+            <dt className="text-muted">{s.label}</dt>
+            <dd className="text-[16px] font-bold tabular-nums text-ink">
+              {s.value}
+            </dd>
           </div>
-        )}
-        {overview.paycheckAmount != null && overview.paycheckAmount > 0 && (
-          <div className="rounded-xl bg-panel px-3 py-2">
-            <p className="text-muted">Each paycheck</p>
-            <p className="mt-1 font-medium tabular-nums text-ink">
-              {formatUsd(overview.paycheckAmount)}
-            </p>
-          </div>
-        )}
-      </div>
-      <p
+        ))}
+      </dl>
+      <div
         className={cn(
-          "mt-4 rounded-xl px-3 py-2 text-[13px] leading-snug",
-          stripOnTrack
-            ? "bg-star/15 text-star"
-            : "bg-offcourse-bg text-offcourse",
+          "flex items-center gap-2.5 px-4 py-3 text-[14px] leading-snug text-ink",
+          stripOnTrack ? "bg-star/15" : "bg-offcourse-bg",
         )}
       >
-        {stripText}
-      </p>
+        <Clock
+          className={cn(
+            "h-[18px] w-[18px] shrink-0",
+            stripOnTrack ? "text-star" : "text-[#f08a4b]",
+          )}
+          aria-hidden
+        />
+        {stripOnTrack ? (
+          <p>
+            On track, arriving{" "}
+            <strong>
+              {formatMonDay(projection.eta ?? goal.targetDate)}
+            </strong>
+          </p>
+        ) : projection.eta ? (
+          <p>
+            ETA <strong>{formatMonDay(projection.eta)}</strong>,{" "}
+            <span className="font-bold text-offcourse">
+              {projection.daysLate} days late
+            </span>{" "}
+            at your current pace
+          </p>
+        ) : (
+          <p>Not at this pace for your goal date.</p>
+        )}
+      </div>
     </article>
   );
+}
+
+function formatCents(amount: number): string {
+  return `$${amount.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }

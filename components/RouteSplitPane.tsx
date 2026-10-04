@@ -11,7 +11,7 @@ import {
 } from "react";
 
 const STORAGE_KEY = "polaris-route-split-pct";
-const DEFAULT_PCT = 52;
+const DEFAULT_PCT = 60;
 const MIN_PCT = 28;
 const MAX_PCT = 72;
 
@@ -140,7 +140,7 @@ export function RouteSplitPane({
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         className={cn(
-          "relative z-10 flex w-full shrink-0 cursor-row-resize items-center justify-center bg-line/40 py-2 md:w-2 md:cursor-col-resize md:py-0",
+          "relative z-10 flex h-3 w-full shrink-0 cursor-row-resize items-center justify-center border-t border-line bg-night md:h-auto md:w-2 md:cursor-col-resize md:border-t-0 md:bg-line/40",
           dragging && "bg-star/25",
         )}
       >
@@ -148,14 +148,11 @@ export function RouteSplitPane({
           className="hidden h-5 w-5 text-muted md:block"
           aria-hidden
         />
-        <span className="text-[11px] text-muted md:hidden">Drag to resize</span>
+        <span className="h-1 w-9 rounded-full bg-border md:hidden" aria-hidden />
       </div>
 
       <section
-        className="flex min-h-0 min-w-0 flex-col overflow-hidden"
-        style={{
-          flex: `0 0 ${100 - leftPct}%`,
-        }}
+        className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
         aria-label={rightLabel}
       >
         <p className="hidden shrink-0 border-b border-line px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted md:block">

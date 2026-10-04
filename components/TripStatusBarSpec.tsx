@@ -3,6 +3,7 @@
 import type { Goal, Projection } from "@/lib/types";
 import { formatMonDay, formatUsd } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { ReactNode } from "react";
 
 type Props = {
   goal: Goal;
@@ -10,12 +11,38 @@ type Props = {
   rerouting?: boolean;
   rerouteFaster?: boolean;
   previousEta?: string | null;
+  /** Saved amount before the money that triggered a faster reroute. */
+  previousSaved?: number | null;
 };
 
-function daysDelta(previousEta: string, newEta: string): number {
-  const prev = new Date(`${previousEta}T12:00:00`).getTime();
-  const next = new Date(`${newEta}T12:00:00`).getTime();
-  return Math.round((prev - next) / 86400000);
+function daysBetween(fromIso: string, toIso: string): number {
+  const from = new Date(`${fromIso}T12:00:00`).getTime();
+  const to = new Date(`${toIso}T12:00:00`).getTime();
+  return Math.round((to - from) / 86400000);
+}
+
+function Stat({
+  label,
+  children,
+  className,
+}: {
+  label: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-[12px] text-muted">{label}</span>
+      <span
+        className={cn(
+          "whitespace-nowrap text-[16px] font-bold tabular-nums text-ink",
+          className,
+        )}
+      >
+        {children}
+      </span>
+    </div>
+  );
 }
 
 export function TripStatusBarSpec({
@@ -24,11 +51,85 @@ export function TripStatusBarSpec({
   rerouting,
   rerouteFaster,
   previousEta,
+  previousSaved,
 }: Props) {
-  const progress =
+  const pct = (amount: number) =>
     goal.targetAmount > 0
-      ? Math.max(0, Math.min(100, (projection.saved / goal.targetAmount) * 100))
+      ? Math.max(0, Math.min(100, (amount / goal.targetAmount) * 100))
       : 0;
+  const progress = pct(projection.saved);
+  const savedLabel = `${formatUsd(projection.saved)} / ${formatUsd(goal.targetAmount)}`;
+
+  const header = (
+    <div className="flex items-baseline justify-between gap-2">
+      <span className="font-heading truncate text-[18px] font-bold text-ink">
+        {goal.name}
+      </span>
+      <span className="shrink-0 text-[13px] text-muted">
+        Arrive by {formatMonDay(goal.targetDate)}
+      </span>
+    </div>
+  );
+
+  if (rerouting) {
+    const delta =
+      previousEta && projection.eta
+        ? daysBetween(previousEta, projection.eta)
+        : 0;
+    const changeLabel =
+      delta < 0 ? `${-delta} days sooner` : delta > 0 ? `+${delta} days` : "—";
+    const priorPct =
+      rerouteFaster && previousSaved != null ? pct(previousSaved) : progress;
+
+    return (
+      <section
+        className="flex shrink-0 flex-col gap-2.5 border-b border-line px-4 py-3"
+        aria-label="Trip status while rerouting"
+      >
+        {header}
+        <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1fr)] gap-2">
+          <Stat label="New ETA">
+            {previousEta && (
+              <span className="mr-1 font-medium text-[#6d7799] line-through">
+                {formatMonDay(previousEta)}
+              </span>
+            )}
+            {projection.eta ? formatMonDay(projection.eta) : "—"}
+          </Stat>
+          <Stat
+            label="Change"
+            className={delta < 0 ? "text-star" : "text-offcourse"}
+          >
+            {changeLabel}
+          </Stat>
+          {rerouteFaster ? (
+            <Stat label="Saved">{savedLabel}</Stat>
+          ) : (
+            <Stat label="With moves" className="text-star">
+              {projection.etaWithMoves
+                ? formatMonDay(projection.etaWithMoves)
+                : "—"}
+            </Stat>
+          )}
+        </div>
+        {rerouteFaster && (
+          <div
+            className="flex h-1.5 overflow-hidden rounded-full bg-line"
+            role="progressbar"
+            aria-valuenow={Math.round(progress)}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div className="h-full bg-star" style={{ width: `${priorPct}%` }} />
+            <div
+              className="h-full bg-[#ffe29a] transition-all duration-700"
+              style={{ width: `${Math.max(0, progress - priorPct)}%` }}
+            />
+          </div>
+        )}
+      </section>
+    );
+  }
 
   const statusLabel = !projection.eta
     ? "Off course"
@@ -38,119 +139,28 @@ export function TripStatusBarSpec({
         : "On track"
       : `${projection.daysLate} days late`;
 
-  const statusClass = projection.onTrack ? "text-star" : "text-offcourse";
-
-  const etaLabel = projection.eta
-    ? formatMonDay(projection.eta)
-    : "Not at this pace";
-
-  if (rerouting) {
-    const sooner =
-      rerouteFaster &&
-      previousEta &&
-      projection.eta &&
-      daysDelta(previousEta, projection.eta) > 0
-        ? daysDelta(previousEta, projection.eta)
-        : 0;
-    const later =
-      !rerouteFaster &&
-      previousEta &&
-      projection.eta &&
-      projection.eta > previousEta
-        ? Math.round(
-            (new Date(`${projection.eta}T12:00:00`).getTime() -
-              new Date(`${previousEta}T12:00:00`).getTime()) /
-              86400000,
-          )
-        : 0;
-
-    return (
-      <section
-        className="shrink-0 border-b border-line px-4 py-3"
-        aria-label="Trip status while rerouting"
-      >
-        {rerouteFaster && (
-          <p className="mb-1 text-[12px] font-semibold text-star">
-            Faster route found
-          </p>
-        )}
-        <p className="truncate text-[13px] font-medium text-ink">
-          {goal.name} · Arrive by {formatMonDay(goal.targetDate)}
-        </p>
-        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[12px]">
-          <div>
-            <p className="text-muted">New ETA</p>
-            <p className="mt-1 text-[13px] font-medium text-ink">
-              {previousEta && (
-                <span className="mr-1 text-muted line-through">
-                  {formatMonDay(previousEta)}
-                </span>
-              )}
-              {projection.eta ? formatMonDay(projection.eta) : "—"}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted">Change</p>
-            <p
-              className={cn(
-                "mt-1 text-[13px] font-medium",
-                rerouteFaster ? "text-star" : "text-offcourse",
-              )}
-            >
-              {sooner > 0
-                ? `${sooner} days sooner`
-                : later > 0
-                  ? `+${later} days`
-                  : "—"}
-            </p>
-          </div>
-          <div>
-            <p className="text-muted">
-              {rerouteFaster ? "Saved" : "With moves"}
-            </p>
-            <p className="mt-1 text-[13px] font-medium tabular-nums text-ink">
-              {rerouteFaster
-                ? `${formatUsd(projection.saved)} / ${formatUsd(goal.targetAmount)}`
-                : projection.etaWithMoves
-                  ? formatMonDay(projection.etaWithMoves)
-                  : "—"}
-            </p>
-          </div>
-        </div>
-      </section>
-    );
-  }
-
   return (
     <section
-      className="shrink-0 border-b border-line px-4 py-3"
+      className="flex shrink-0 flex-col gap-2.5 border-b border-line px-4 py-3"
       aria-label="Trip status"
     >
-      <p className="truncate text-[13px] font-medium text-ink">
-        {goal.name} · Arrive by {formatMonDay(goal.targetDate)}
-      </p>
-      <div className="mt-3 grid grid-cols-3 gap-2 text-center text-[12px]">
-        <div>
-          <p className="text-muted">ETA</p>
-          <p className="mt-1 text-[13px] font-medium text-ink">{etaLabel}</p>
-        </div>
-        <div>
-          <p className="text-muted">Status</p>
-          <p className={cn("mt-1 text-[13px] font-medium", statusClass)}>
-            {statusLabel}
-          </p>
-        </div>
-        <div>
-          <p className="text-muted">Saved</p>
-          <p className="mt-1 text-[13px] font-medium tabular-nums text-ink">
-            {formatUsd(projection.saved)} / {formatUsd(goal.targetAmount)}
-          </p>
-        </div>
+      {header}
+      <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_minmax(0,1fr)] gap-2">
+        <Stat label="ETA">
+          {projection.eta ? formatMonDay(projection.eta) : "Not at this pace"}
+        </Stat>
+        <Stat
+          label="Status"
+          className={projection.onTrack ? "text-star" : "text-offcourse"}
+        >
+          {statusLabel}
+        </Stat>
+        <Stat label="Saved">{savedLabel}</Stat>
       </div>
       <div
-        className="mt-3 h-1.5 overflow-hidden rounded-full bg-line"
+        className="h-1.5 overflow-hidden rounded-full bg-line"
         role="progressbar"
-        aria-valuenow={progress}
+        aria-valuenow={Math.round(progress)}
         aria-valuemin={0}
         aria-valuemax={100}
       >

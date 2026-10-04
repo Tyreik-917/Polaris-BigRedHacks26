@@ -5,15 +5,22 @@ import {
   fixtureGoal,
   fixtureOverview,
   getFixturePostcard,
-  fixtureProjectionBefore,
   fixtureRouteEvents,
   resetFixtureScenario,
-  fixtureTipsPolarisReply,
+  fixtureIncomeReply,
+  fixtureProjectionForIncome,
+  addFixtureIncome,
+  addFixtureExpectedIncome,
   triggerFixturePurchase,
   triggerFixtureSamPayment,
   triggerFixtureTips,
-  fixtureProjectionAfterTips,
 } from "@/lib/fixtures";
+import {
+  formatMonDayYear,
+  localIsoDate,
+  parseExpectedMoney,
+  parseReceivedMoney,
+} from "@/lib/polaris/received-money";
 import { loadGoal, saveGoal } from "@/lib/goal-storage";
 import { polarisFetch } from "@/lib/api/client-fetch";
 import { readApiError } from "@/lib/api/read-error";
@@ -209,7 +216,7 @@ export async function createGoal(draft: ParsedGoalDraft): Promise<Goal> {
 
 export async function fetchProjection(goalId: string): Promise<Projection> {
   if (useFixtures) {
-    return delay({ ...fixtureProjectionBefore, goalId });
+    return delay({ ...fixtureProjectionForIncome(), goalId });
   }
   const res = await fetchWithRetry(`/api/goals/${goalId}/projection`);
   if (!res.ok) throw new Error(await readApiError(res));
@@ -261,22 +268,53 @@ export async function routeChat(
 ): Promise<RouteChatResult> {
   if (useFixtures) {
     const last = messages[messages.length - 1]?.content ?? "";
-    if (/tip/i.test(last) || /\$85/.test(last)) {
-      triggerFixtureTips();
+    const today = localIsoDate();
+    const expected = parseExpectedMoney(last, today);
+    if (expected) {
+      if (!expected.date) {
+        return delay({
+          reply: `Nice! When is ${expected.sender} sending the $${expected.amount.toLocaleString("en-US")}? Tell me the date, like "Oct 15", and I'll add a star for it.`,
+          event: null,
+          projection: null,
+        });
+      }
+      const { before, after, event } = addFixtureExpectedIncome({
+        date: expected.date,
+        label: expected.label,
+        amount: expected.amount,
+        description: "Money from someone",
+      });
+      const when = formatMonDayYear(expected.date, today);
+      const gained =
+        before.eta && after.eta
+          ? Math.round(
+              (Date.parse(`${before.eta}T12:00:00Z`) -
+                Date.parse(`${after.eta}T12:00:00Z`)) /
+                86400000,
+            )
+          : 0;
+      const impact =
+        after.eta && gained > 0
+          ? ` Once it lands you arrive ${formatMonDayYear(after.eta, today)}, ${gained} day${gained === 1 ? "" : "s"} sooner.`
+          : "";
       return delay({
-        reply: fixtureTipsPolarisReply,
-        event: {
-          id: "chat-tips-85",
-          type: "income_reported",
-          description: "Tips deposited to checking",
-          amount: 85,
-          previousEta: fixtureProjectionBefore.eta,
-          newEta: fixtureProjectionAfterTips.eta,
-          account: "Capital One checking",
-          previousWaypoints: fixtureProjectionBefore.waypoints,
-          projection: fixtureProjectionAfterTips,
-        },
-        projection: fixtureProjectionAfterTips,
+        reply: `Got it. I added a star on ${when} for the $${expected.amount.toLocaleString("en-US")} ${expected.sender === "they" ? "coming in" : `${expected.sender} is sending`}.${impact}`,
+        event,
+        projection: after,
+      });
+    }
+    const received = parseReceivedMoney(last);
+    if (received) {
+      const { before, after, event } = addFixtureIncome({
+        date: localIsoDate(),
+        label: received.label,
+        amount: received.amount,
+        description: received.description,
+      });
+      return delay({
+        reply: fixtureIncomeReply(received, before, after),
+        event,
+        projection: after,
       });
     }
     if (/\$\s*\d/.test(last) && /spent|bought|purchase/i.test(last)) {
@@ -298,7 +336,7 @@ export async function routeChat(
   const res = await polarisFetch(`/api/goals/${goalId}/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ messages }),
+    body: JSON.stringify({ messages, localDate: localIsoDate() }),
   });
   if (!res.ok) throw new Error(await readApiError(res));
   const data = (await res.json()) as {

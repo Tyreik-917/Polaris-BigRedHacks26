@@ -1,4 +1,8 @@
 import { showcaseImages } from "@/lib/demo/showcase-images";
+import {
+  demoDaysSoonerForIncome,
+  localIsoDate,
+} from "@/lib/polaris/received-money";
 import type {
   Goal,
   Overview,
@@ -176,6 +180,39 @@ export function fixtureCheckpointDetail(
   waypoint: Waypoint,
   goal: Goal,
 ): WaypointCheckpoint {
+  if (waypoint.expected) {
+    const days = demoDaysSoonerForIncome(waypoint.amount);
+    return {
+      checkpointIndex: 1,
+      checkpointTotal: 4,
+      imagineUrl: GOAL_IMAGINE_URL,
+      inspireLine:
+        days > 0
+          ? `When this lands, you arrive ${days} day${days === 1 ? "" : "s"} sooner.`
+          : `+${usd(waypoint.amount)} on the way toward ${goal.name}.`,
+      comingIn: [{ label: waypoint.label, amount: waypoint.amount }],
+      dueBeforeNext: [],
+      savedTowardGoal: undefined,
+    };
+  }
+
+  if (waypoint.reported) {
+    const days = demoDaysSoonerForIncome(waypoint.amount);
+    return {
+      checkpointIndex: 1,
+      checkpointTotal: 4,
+      imagineUrl:
+        waypoint.label === "Tips" ? showcaseImages.tipsShift : GOAL_IMAGINE_URL,
+      inspireLine:
+        days > 0
+          ? `This +${usd(waypoint.amount)} moved your arrival ${days} day${days === 1 ? "" : "s"} sooner.`
+          : `Every bit counts: +${usd(waypoint.amount)} toward ${goal.name}.`,
+      comingIn: [{ label: waypoint.label, amount: waypoint.amount }],
+      dueBeforeNext: [],
+      savedTowardGoal: fixtureProjectionForIncome().saved,
+    };
+  }
+
   const key = `${waypoint.date}|${waypoint.label}`;
   const fixed = CHECKPOINT_DETAILS[key];
   if (fixed) return fixed;
@@ -199,7 +236,6 @@ export function fixtureCheckpointDetail(
 }
 
 let fixtureEventCursor = 0;
-let fixtureTipsApplied = false;
 let fixturePurchaseApplied = false;
 let fixtureSamPaid = false;
 
@@ -207,7 +243,9 @@ let postcardPolls = 0;
 
 export function resetFixtureScenario() {
   fixtureEventCursor = 0;
-  fixtureTipsApplied = false;
+  fixtureIncome = [];
+  fixtureExpected = [];
+  pendingIncomeEvents = [];
   fixturePurchaseApplied = false;
   fixtureSamPaid = false;
   postcardPolls = 0;
@@ -223,20 +261,9 @@ export function fixtureRouteEvents(since: string): RouteEventsResponse {
   void since;
   const events: RouteEventRecord[] = [];
 
-  if (fixtureTipsApplied && fixtureEventCursor < 1) {
-    fixtureEventCursor = 1;
-    events.push({
-      id: "evt-tips-85",
-      type: "income_reported",
-      description: "Tips deposited to checking",
-      amount: 85,
-      previousEta: fixtureProjectionBefore.eta,
-      newEta: fixtureProjectionAfterTips.eta,
-      account: "Capital One checking",
-      previousWaypoints: fixtureProjectionBefore.waypoints,
-      projection: fixtureProjectionAfterTips,
-    });
-  }
+  // Money added from the demo panel shows up on the next poll.
+  events.push(...pendingIncomeEvents);
+  pendingIncomeEvents = [];
 
   if (fixturePurchaseApplied && fixtureEventCursor < 2) {
     fixtureEventCursor = 2;
@@ -280,8 +307,204 @@ export function fixtureRouteEvents(since: string): RouteEventsResponse {
   return { events };
 }
 
+/* ---------- "I received money" in demo mode ---------- */
+
+type FixtureIncome = {
+  date: string;
+  label: string;
+  amount: number;
+  description: string;
+};
+
+let fixtureIncome: FixtureIncome[] = [];
+/** Money someone said they will send on a future date. */
+let fixtureExpected: FixtureIncome[] = [];
+let pendingIncomeEvents: RouteEventRecord[] = [];
+
+function usd(n: number): string {
+  return `$${n.toLocaleString("en-US", {
+    minimumFractionDigits: n % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function shiftIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function daysFrom(a: string, b: string): number {
+  return Math.round(
+    (new Date(`${b}T12:00:00Z`).getTime() - new Date(`${a}T12:00:00Z`).getTime()) /
+      86400000,
+  );
+}
+
+/** The demo route after every amount the user said they received. */
+export function fixtureProjectionForIncome(
+  list: FixtureIncome[] = fixtureIncome,
+  expected: FixtureIncome[] = fixtureExpected,
+): Projection {
+  if (list.length === 0 && expected.length === 0) return fixtureProjectionBefore;
+  const received = list.reduce((sum, i) => sum + i.amount, 0);
+  // Promised money counts toward the ETA once it lands (if before the baseline arrival).
+  const counted = expected.filter(
+    (i) => i.date <= (fixtureProjectionBefore.eta ?? "2027-01-06"),
+  );
+  const promised = counted.reduce((sum, i) => sum + i.amount, 0);
+  const total = received + promised;
+  const shifted = shiftIso(
+    fixtureProjectionBefore.eta ?? "2027-01-06",
+    -demoDaysSoonerForIncome(total),
+  );
+  // Money can't get you there before it arrives.
+  const lastArrival = counted.reduce(
+    (latest, i) => (i.date > latest ? i.date : latest),
+    "",
+  );
+  const eta = lastArrival > shifted ? lastArrival : shifted;
+  const daysLate = daysFrom(DEMO_TARGET_DATE, eta);
+  const stillNeeded = Math.ceil((Math.max(0, daysLate) * 85) / 9);
+  return {
+    ...fixtureProjectionBefore,
+    saved: Math.round((112 + received) * 100) / 100,
+    eta,
+    daysLate,
+    onTrack: daysLate <= 0,
+    waypoints: [
+      ...list.map(
+        (i): Waypoint => ({
+          date: i.date,
+          label: i.label,
+          kind: "income",
+          amount: i.amount,
+          status: "passed",
+          reported: true,
+        }),
+      ),
+      // Promised money joins the bills and paydays in date order (year, month, day).
+      ...[
+        ...demoCheckpoints,
+        ...expected.map(
+          (i): Waypoint => ({
+            date: i.date,
+            label: i.label,
+            kind: "income",
+            amount: i.amount,
+            status: "upcoming",
+            expected: true,
+          }),
+        ),
+      ].sort((a, b) => a.date.localeCompare(b.date)),
+    ],
+    nextMove:
+      daysLate > 0
+        ? {
+            id: "move-more-income",
+            label:
+              total === 85 && received === 85
+                ? "Two more nights like this and you'll make Dec 10"
+                : `About ${usd(stillNeeded)} more gets you there by Dec 10`,
+            savings: stillNeeded,
+            daysGained: daysLate,
+          }
+        : null,
+    computedAt: new Date().toISOString(),
+  };
+}
+
+/** Records received money; returns the route before/after and the reroute event. */
+export function addFixtureIncome(income: FixtureIncome): {
+  before: Projection;
+  after: Projection;
+  event: RouteEventRecord;
+} {
+  const before = fixtureProjectionForIncome();
+  fixtureIncome = [...fixtureIncome, income];
+  const after = fixtureProjectionForIncome();
+  return {
+    before,
+    after,
+    event: {
+      id: `income-${fixtureIncome.length}-${income.label}-${income.amount}`,
+      type: "income_reported",
+      description: `${income.label} deposited to checking`,
+      amount: income.amount,
+      previousEta: before.eta,
+      newEta: after.eta,
+      account: "Capital One checking",
+      previousWaypoints: before.waypoints,
+      projection: after,
+    },
+  };
+}
+
+/** Records money someone will send on `income.date`; returns the route before/after. */
+export function addFixtureExpectedIncome(income: FixtureIncome): {
+  before: Projection;
+  after: Projection;
+  event: RouteEventRecord;
+} {
+  const before = fixtureProjectionForIncome();
+  fixtureExpected = [...fixtureExpected, income];
+  const after = fixtureProjectionForIncome();
+  const when = new Date(`${income.date}T12:00:00`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(income.date.slice(0, 4) !== localIsoDate().slice(0, 4)
+      ? { year: "numeric" as const }
+      : {}),
+  });
+  return {
+    before,
+    after,
+    event: {
+      id: `expected-${fixtureExpected.length}-${income.label}-${income.date}`,
+      type: "income_expected",
+      description: `${income.label} · arriving ${when}`,
+      amount: income.amount,
+      previousEta: before.eta,
+      newEta: after.eta,
+      previousWaypoints: before.waypoints,
+      projection: after,
+    },
+  };
+}
+
+/** What Polaris says after money comes in (numbers from the projection, not a model). */
+export function fixtureIncomeReply(
+  income: { label: string; amount: number },
+  before: Projection,
+  after: Projection,
+): string {
+  if (fixtureIncome.length === 1 && income.label === "Tips" && income.amount === 85) {
+    return fixtureTipsPolarisReply;
+  }
+  const added = `Nice! I added ${usd(income.amount)} to your Capital One checking and put a new star on your route.`;
+  if (!after.eta) return added;
+  const gained = before.eta ? daysFrom(after.eta, before.eta) : 0;
+  const when = new Date(`${after.eta}T12:00:00`).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+  });
+  if (after.onTrack) {
+    return `${added} You're back on course: arriving ${when}, in time for Dec 10.`;
+  }
+  if (gained > 0) {
+    return `${added} You now arrive ${when}, ${gained} day${gained === 1 ? "" : "s"} sooner.`;
+  }
+  return `${added} Your arrival holds at ${when}, but every bit counts.`;
+}
+
 export function triggerFixtureTips() {
-  fixtureTipsApplied = true;
+  const { event } = addFixtureIncome({
+    date: localIsoDate(),
+    label: "Tips",
+    amount: 85,
+    description: "Extra shift",
+  });
+  pendingIncomeEvents.push(event);
 }
 
 export function triggerFixturePurchase() {

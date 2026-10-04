@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 type Props = {
   rightSlot?: ReactNode;
   rerouting?: boolean;
+  rerouteFaster?: boolean;
   recovered?: boolean;
   onAvatarPress?: () => void;
 };
@@ -14,6 +15,7 @@ type Props = {
 export function AppHeader({
   rightSlot,
   rerouting,
+  rerouteFaster,
   recovered,
   onAvatarPress,
 }: Props) {
@@ -26,7 +28,7 @@ export function AppHeader({
         </span>
       </div>
       <div className="flex items-center gap-2">
-        {rerouting && <ReroutingBadge />}
+        {rerouting && <ReroutingBadge faster={rerouteFaster} />}
         {recovered && (
           <span className="rounded-full bg-star/20 px-3 py-1 text-xs font-medium text-star">
             Back on course

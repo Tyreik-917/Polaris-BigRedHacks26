@@ -1,24 +1,30 @@
 "use client";
 
-import { Loader2 } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type Props = {
   className?: string;
+  /** New money shortened the trip: gold "Faster route found" instead of orange. */
+  faster?: boolean;
 };
 
-export function ReroutingBadge({ className }: Props) {
+export function ReroutingBadge({ className, faster }: Props) {
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border border-amber-500/45 bg-amber-950/90 px-2.5 py-0.5 text-xs font-medium text-amber-100 shadow-sm ring-1 ring-amber-800/40",
+        "inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[13px] font-bold",
+        faster ? "bg-[#3a3015] text-star" : "bg-offcourse-bg text-offcourse",
         className,
       )}
       role="status"
       aria-live="polite"
     >
-      <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-      Rerouting…
+      <RefreshCw
+        className={cn("h-3.5 w-3.5", !faster && "animate-spin")}
+        aria-hidden
+      />
+      {faster ? "Faster route found" : "Rerouting…"}
     </span>
   );
 }

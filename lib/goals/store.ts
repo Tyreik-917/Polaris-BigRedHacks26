@@ -24,6 +24,8 @@ export type GoalAdjustments = {
   reportedIncomeTotal: number;
   incomeEvents: ReportedIncomeEvent[];
   extraBills: ReportedBill[];
+  /** Money someone said they will send on a future date (not in the account yet). */
+  expectedIncome?: ReportedIncomeEvent[];
 };
 
 const emptyAdjustments = (): GoalAdjustments => ({
@@ -94,7 +96,22 @@ export async function getGoalAdjustments(
     ...raw,
     incomeEvents: raw.incomeEvents ?? [],
     extraBills: raw.extraBills ?? [],
+    expectedIncome: raw.expectedIncome ?? [],
   };
+}
+
+/** "Sam is sending me $20 on Oct 15": a future star; counted in the ETA, not the balance. */
+export async function addExpectedIncome(
+  goalId: string,
+  income: { date: string; label: string; amount: number; description: string },
+): Promise<GoalAdjustments> {
+  const prev = await getGoalAdjustments(goalId);
+  const next: GoalAdjustments = {
+    ...prev,
+    expectedIncome: [...(prev.expectedIncome ?? []), income],
+  };
+  await kvSet(adjustmentsKey(goalId), next);
+  return next;
 }
 
 export async function addReportedSpend(
@@ -113,11 +130,15 @@ export async function addReportedSpend(
 export async function addReportedIncome(
   goalId: string,
   amount: number,
-  meta: { description: string; label?: string },
+  meta: { description: string; label?: string; date?: string },
   ref: Date = new Date(),
 ): Promise<GoalAdjustments> {
   const prev = await getGoalAdjustments(goalId);
-  const date = ref.toISOString().slice(0, 10);
+  // Prefer the user's local day (sent by the client); UTC runs a day ahead in US evenings.
+  const date =
+    meta.date && /^\d{4}-\d{2}-\d{2}$/.test(meta.date)
+      ? meta.date
+      : ref.toISOString().slice(0, 10);
   const label =
     meta.label ??
     (/tip/i.test(meta.description) ? "Tips" : meta.description.slice(0, 40));

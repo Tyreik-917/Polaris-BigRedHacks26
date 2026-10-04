@@ -2,6 +2,8 @@ import type { GoalAdjustments } from "@/lib/goals/store";
 import type { FinancialSnapshot, NormalizedBill } from "@/lib/nessie/types";
 import type { Goal, Move, Projection, Waypoint } from "@/lib/types";
 
+import { demoDaysSoonerForIncome } from "@/lib/polaris/received-money";
+
 const MAX_SIM_DAYS = 400;
 const BILL_RESERVE_DAYS = 14;
 const MAX_STARS_BEFORE_GOAL = 4;
@@ -126,15 +128,26 @@ function buildStarWaypoints(
 
   const stars: Waypoint[] = [];
 
-  for (const ev of adjustments.incomeEvents) {
-    stars.push({
-      date: ev.date,
-      label: ev.label,
-      kind: "income",
-      amount: ev.amount,
-      status: ev.date <= todayStr ? "passed" : "upcoming",
-    });
-  }
+  // Money someone will send: an upcoming star on its date, kept even past the
+  // usual checkpoint limit so the user always sees it on the route.
+  const expected: Waypoint[] = (adjustments.expectedIncome ?? []).map((ev) => ({
+    date: ev.date,
+    label: ev.label,
+    kind: "income",
+    amount: ev.amount,
+    status: ev.date < todayStr ? "passed" : "upcoming",
+    expected: true,
+  }));
+
+  // Each "I received money" report is its own star, even two on the same day.
+  const reported: Waypoint[] = adjustments.incomeEvents.map((ev) => ({
+    date: ev.date,
+    label: ev.label,
+    kind: "income",
+    amount: ev.amount,
+    status: "passed",
+    reported: true,
+  }));
 
   for (const [date, rows] of billMap) {
     if (date > routeEnd) continue;
@@ -177,16 +190,12 @@ function buildStarWaypoints(
       w.date >= todayStr,
   );
 
-  const passedIncome = sorted.filter(
-    (w) => w.kind === "income" && w.status === "passed",
-  );
-
+  // ISO dates sort by year, then month, then day.
   const picked = [
-    ...passedIncome,
-    ...beforeGoal.slice(0, MAX_STARS_BEFORE_GOAL),
-  ]
-    .sort((a, b) => a.date.localeCompare(b.date))
-    .slice(0, MAX_STARS_BEFORE_GOAL + passedIncome.length);
+    ...reported,
+    ...expected,
+    ...beforeGoal.slice(0, Math.max(2, MAX_STARS_BEFORE_GOAL - expected.length)),
+  ].sort((a, b) => a.date.localeCompare(b.date));
 
   void ledger;
   return picked;
@@ -203,6 +212,11 @@ function simulateSavingsRoute(
   const bills = mergeBills(snapshot, adjustments);
   const billMap = expandBills(bills, todayStr, horizon);
   const payMap = expandPaydays(snapshot, todayStr, horizon);
+  const expectedMap = new Map<string, number>();
+  for (const ev of adjustments.expectedIncome ?? []) {
+    const day = ev.date < todayStr ? todayStr : ev.date;
+    expectedMap.set(day, (expectedMap.get(day) ?? 0) + ev.amount);
+  }
 
   let checking =
     snapshot.checkingBalance +
@@ -217,6 +231,7 @@ function simulateSavingsRoute(
     const date = addDays(todayStr, i);
     if (date > horizon) break;
 
+    checking += expectedMap.get(date) ?? 0;
     if (i > 0) {
       checking += payMap.get(date) ?? 0;
       for (const row of billMap.get(date) ?? []) checking -= row.amount;
@@ -306,10 +321,24 @@ function calibrateDemoEta(
     return { eta: rawEta, daysLate };
   }
 
-  if (adjustments.reportedIncomeTotal >= 85) {
-    return { eta: "2026-12-28", daysLate: 18 };
-  }
-  return { eta: "2027-01-06", daysLate: 27 };
+  // Baseline Jan 6 (27 days late); every dollar received moves it sooner
+  // at the storyboard's rate ($85 of tips → Dec 28, 9 days sooner).
+  // Money promised before the baseline arrival counts too, once it lands —
+  // but it can't get you there before it arrives.
+  const counted = (adjustments.expectedIncome ?? []).filter(
+    (ev) => ev.date <= "2027-01-06",
+  );
+  const promised = counted.reduce((sum, ev) => sum + ev.amount, 0);
+  const lastArrival = counted.reduce(
+    (latest, ev) => (ev.date > latest ? ev.date : latest),
+    "",
+  );
+  const shifted = addDays(
+    "2027-01-06",
+    -demoDaysSoonerForIncome(adjustments.reportedIncomeTotal + promised),
+  );
+  const eta = lastArrival > shifted ? lastArrival : shifted;
+  return { eta, daysLate: daysBetween(goal.targetDate.slice(0, 10), eta) };
 }
 
 export function projectSavingsRoute(

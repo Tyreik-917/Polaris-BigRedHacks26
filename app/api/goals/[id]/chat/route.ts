@@ -1,5 +1,6 @@
 import { jsonError, parseJsonBody, rateLimit } from "@/lib/api/http";
 import {
+  addExpectedIncome,
   addReportedBill,
   addReportedIncome,
   addReportedSpend,
@@ -12,6 +13,11 @@ import {
   describePurchaseImpact,
 } from "@/lib/grok/route-chat";
 import { depositIncomeToChecking } from "@/lib/polaris/income-deposit";
+import {
+  formatMonDayYear,
+  parseExpectedMoney,
+  receivedMoneyLabel,
+} from "@/lib/polaris/received-money";
 import { buildProjectionForGoal } from "@/lib/polaris/build-projection";
 import type { RouteEvent } from "@/lib/types";
 import { NextResponse } from "next/server";
@@ -32,6 +38,11 @@ const bodySchema = z.object({
     .min(1)
     .max(30)
     .refine((m) => m[m.length - 1]?.role === "user", "last message must be from the user"),
+  /** The user's local calendar day, so a new star lands on "today" for them. */
+  localDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
 });
 
 function parseNewBill(text: string): { payee: string; amount: number; dueDate: string } | null {
@@ -83,16 +94,69 @@ export async function POST(request: Request, { params }: Params) {
       });
     }
 
+    // "My friend Sam is sending me $20 on Oct 15" → an upcoming star on that date.
+    const today = parsed.data.localDate ?? new Date().toISOString().slice(0, 10);
+    const expected = parseExpectedMoney(latest, today);
+    if (expected) {
+      if (!expected.date) {
+        const who = expected.sender === "they" ? "they" : expected.sender;
+        return NextResponse.json({
+          reply: `Nice! When is ${who} sending the $${expected.amount.toLocaleString("en-US")}? Tell me the date, like "Oct 15", and I'll add a star for it.`,
+          event: null,
+          projection: null,
+        });
+      }
+      const { projection: before } = await buildProjectionForGoal(goal);
+      await addExpectedIncome(goal.id, {
+        date: expected.date,
+        label: expected.label,
+        amount: expected.amount,
+        description: `${expected.label} on ${expected.date}`,
+      });
+      const { projection: after } = await buildProjectionForGoal(goal);
+      const when = formatMonDayYear(expected.date, today);
+      const gained =
+        before.eta && after.eta
+          ? Math.round(
+              (Date.parse(`${before.eta}T12:00:00Z`) - Date.parse(`${after.eta}T12:00:00Z`)) /
+                86400000,
+            )
+          : 0;
+      const impact = !after.eta
+        ? ""
+        : after.onTrack
+          ? ` Once it lands you're on course, arriving ${formatMonDayYear(after.eta, today)}.`
+          : gained > 0
+            ? ` Once it lands you arrive ${formatMonDayYear(after.eta, today)}, ${gained} day${gained === 1 ? "" : "s"} sooner.`
+            : "";
+      const event: RouteEvent = {
+        type: "income_expected",
+        description: `${expected.label} · arriving ${when}`,
+        amount: expected.amount,
+        previousEta: before.eta,
+        newEta: after.eta,
+      };
+      return NextResponse.json({
+        reply: `Got it. I added a star on ${when} for the $${expected.amount.toLocaleString("en-US")} ${expected.sender === "they" ? "coming in" : `${expected.sender} is sending`}.${impact}`,
+        event: { ...event, previousWaypoints: before.waypoints },
+        projection: after,
+      });
+    }
+
     const intent = await classifyRouteMessage(latest);
 
     if (intent.kind === "purchase" || intent.kind === "income") {
       const isIncome = intent.kind === "income";
       const { projection: before } = await buildProjectionForGoal(goal);
 
+      const starLabel = isIncome
+        ? receivedMoneyLabel(latest, intent.description)
+        : null;
       if (isIncome) {
         await addReportedIncome(goal.id, intent.amount, {
           description: intent.description,
-          label: /tip/i.test(latest) ? "Tips" : intent.description,
+          label: starLabel ?? "Money in",
+          date: parsed.data.localDate,
         });
         await depositIncomeToChecking(intent.amount, intent.description);
       } else {
@@ -104,7 +168,7 @@ export async function POST(request: Request, { params }: Params) {
       const event: RouteEvent = {
         type: isIncome ? "income_reported" : "user_reported",
         description: isIncome
-          ? "Tips deposited to checking"
+          ? `${starLabel} deposited to checking`
           : intent.description,
         amount: intent.amount,
         previousEta: before.eta,
@@ -112,7 +176,12 @@ export async function POST(request: Request, { params }: Params) {
       };
 
       let reply = isIncome
-        ? describeIncomeImpact(intent, goal, before, after)
+        ? `Nice! I added $${intent.amount.toLocaleString("en-US")} (${starLabel}) to your Capital One checking and put a new star on your route. ${describeIncomeImpact(
+            intent,
+            goal,
+            before,
+            after,
+          ).replace(/^Added: [^.]*\.\s*/, "")}`.trim()
         : describePurchaseImpact(intent, goal, before, after);
 
       if (isIncome && intent.amount === 85 && /tip/i.test(latest)) {
@@ -132,7 +201,7 @@ export async function POST(request: Request, { params }: Params) {
         accountUpdate: isIncome
           ? {
               account: "Capital One checking",
-              line: `Tips deposited to checking +$${intent.amount.toFixed(2)}`,
+              line: `${starLabel} deposited to checking +$${intent.amount.toFixed(2)}`,
             }
           : null,
       });

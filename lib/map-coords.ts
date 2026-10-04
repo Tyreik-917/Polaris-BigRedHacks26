@@ -9,6 +9,8 @@ export const MAP = {
 
 /** Most checkpoints drawn between "You" and the goal; more than this gets cluttered. */
 const MAX_CHECKPOINTS = 4;
+/** Most "money received" stars drawn at once (the latest ones). */
+const MAX_NEW_MONEY_STARS = 3;
 /** Minimum spacing between markers, as a fraction of the route. */
 const MIN_GAP = 0.13;
 
@@ -79,9 +81,31 @@ export function splitCurve(
   ];
 }
 
+/**
+ * The rerouted path: leaves "You" climbing early and meets the goal star from
+ * the left, so it reads as a different route from the original S-curve.
+ */
+export function rerouteCurve(): RouteCurve {
+  const s = MAP.start;
+  const g = MAP.goal;
+  return [
+    { x: s.x, y: s.y },
+    { x: s.x + 30, y: s.y - 170 },
+    { x: g.x - 170, y: g.y + 20 },
+    { x: g.x, y: g.y },
+  ];
+}
+
 export function curveToPath([p0, p1, p2, p3]: RouteCurve): string {
   const f = (p: Pt) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`;
   return `M${f(p0)} C${f(p1)} ${f(p2)} ${f(p3)}`;
+}
+
+function localIsoDate(timestamp: string): string {
+  const d = new Date(timestamp);
+  if (Number.isNaN(d.getTime())) return timestamp.slice(0, 10);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 function pickEvenly<T>(items: T[], max: number): T[] {
@@ -103,12 +127,27 @@ export function enrichWaypointsForMap(
   todayIso: string,
   endDate: string,
 ): Waypoint[] {
-  const startDate = goal.createdAt.slice(0, 10);
+  // Local calendar day: slicing the UTC timestamp jumps to "tomorrow" in US evenings.
+  const startDate = localIsoDate(goal.createdAt);
   const skip = new Set(["Start", "You", goal.name]);
+
+  // Money the user reported receiving (or income landing today) sits just past
+  // "You", lit. Only the latest few are drawn so the route stays readable.
+  const isNewMoney = (w: Waypoint) =>
+    w.reported === true || (w.date === todayIso && w.kind === "income");
+  const newMoney = waypoints
+    .filter((w) => !skip.has(w.label) && isNewMoney(w))
+    .slice(-MAX_NEW_MONEY_STARS)
+    .map((w) => ({ ...w, status: "passed" as const }));
 
   const inTrip = [...waypoints]
     .filter(
-      (w) => !skip.has(w.label) && w.date > startDate && w.date < endDate,
+      (w) =>
+        !skip.has(w.label) &&
+        !isNewMoney(w) &&
+        w.date > startDate &&
+        // Promised money arriving on the last day of the trip still gets its star.
+        (w.date < endDate || (w.expected === true && w.date <= endDate)),
     )
     .sort((a, b) => a.date.localeCompare(b.date))
     .map((w) => ({
@@ -120,9 +159,22 @@ export function enrichWaypointsForMap(
     inTrip.filter((w) => w.date <= todayIso),
     2,
   );
-  const afterYou = pickEvenly(
-    inTrip.filter((w) => w.date > todayIso),
-    MAX_CHECKPOINTS,
+  // Promised money always gets its star. The first new-money and first promised
+  // star are free; each extra one takes the place of a regular checkpoint (keep
+  // at least 2). Then everything goes back into date order.
+  const ahead = inTrip.filter((w) => w.date > todayIso);
+  const promised = ahead.filter((w) => w.expected).slice(0, MAX_NEW_MONEY_STARS);
+  const regular = pickEvenly(
+    ahead.filter((w) => !w.expected),
+    Math.max(
+      2,
+      MAX_CHECKPOINTS -
+        Math.max(0, newMoney.length - 1) -
+        Math.max(0, promised.length - 1),
+    ),
+  );
+  const afterYou = [...promised, ...regular].sort((a, b) =>
+    a.date.localeCompare(b.date),
   );
 
   const start: Waypoint = {
@@ -148,7 +200,7 @@ export function enrichWaypointsForMap(
   };
 
   const head = startDate < todayIso ? [start, ...beforeYou] : [];
-  return [...head, you, ...afterYou, goalWp];
+  return [...head, you, ...newMoney, ...afterYou, goalWp];
 }
 
 /** Places waypoints on the curve by date, nudged apart so markers never overlap. */

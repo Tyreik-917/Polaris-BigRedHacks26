@@ -17,6 +17,10 @@ export type Waypoint = {
   kind: "bill" | "income" | "milestone" | "move";
   amount: number;
   status: "passed" | "upcoming";
+  /** Money the user told Polaris they received; drawn as a new lit star after "You". */
+  reported?: boolean;
+  /** Money someone said they WILL send on this date; an upcoming star in date order. */
+  expected?: boolean;
 };
 
 export type Move = {
@@ -45,6 +49,7 @@ export type RouteEvent = {
     | "purchase_detected"
     | "user_reported"
     | "income_reported"
+    | "income_expected"
     | "transfer_received";
   description: string;
   amount: number;

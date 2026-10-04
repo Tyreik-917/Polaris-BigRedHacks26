@@ -14,6 +14,7 @@ import {
   fixtureGoalSetUserLine,
   fixturePolarisRouteMessage,
 } from "@/lib/fixtures";
+import { ArrowRight } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 
@@ -101,9 +102,10 @@ export default function GoalSetPage() {
 
           <Link
             href={`/route/${id}`}
-            className="flex h-[52px] items-center justify-center rounded-xl bg-star text-[16px] font-semibold text-star-ink"
+            className="flex h-12 shrink-0 items-center justify-center gap-2 rounded-xl bg-star text-[15px] font-bold text-star-ink"
           >
             Show my star route
+            <ArrowRight className="h-[18px] w-[18px]" aria-hidden />
           </Link>
         </div>
       </PageTransition>

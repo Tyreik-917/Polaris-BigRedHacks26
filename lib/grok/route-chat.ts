@@ -3,6 +3,7 @@ import type { Goal, Projection } from "@/lib/types";
 import { z } from "zod";
 import { xaiChatCompletion } from "./client";
 import { parseSpendingReportHeuristic } from "./parse-spending-report";
+import { amountIn, INCOME_CUES } from "@/lib/polaris/received-money";
 
 export type RouteChatTurn = { role: "user" | "assistant"; content: string };
 
@@ -15,25 +16,6 @@ const QUESTION_START =
   /^(can|could|should|what|what's|whats|how|when|why|where|am|is|are|will|would|do|does|did|if|which|tell me|help)\b/i;
 const SPEND_VERB =
   /\b(spent|spend|bought|paid for|paid|got|grabbed|ordered|picked up|had to buy|purchased|treated myself)\b/i;
-
-/** Money coming in, checked before SPEND_VERB ("got paid", "got $200 from my mom"). */
-const INCOME_CUES: [RegExp, string][] = [
-  [/\b(got paid|get paid|paycheck|payday|direct deposit)\b/i, "Paycheck"],
-  [/\b(extra shift|overtime|tips?)\b/i, "Extra shift"],
-  [/\b(sent me|gave me|venmo'?d me|zelle'?d me|paid me back|paid me|from my (mom|dad|parents|family|grandma|grandpa))\b/i, "Money from someone"],
-  [/\b(refund(ed)?|reimburs\w*|got .{0,20}back)\b/i, "Refund"],
-  [/\b(sold)\b/i, "Sale"],
-  [/\b(earned|made|received|bonus|scholarship|stipend)\b/i, "Income"],
-];
-
-function amountIn(text: string): number | null {
-  const m =
-    text.match(/\$\s*(\d[\d,]*(?:\.\d{1,2})?)/) ??
-    text.match(/\b(\d[\d,]*(?:\.\d{1,2})?)\s*(?:dollars?|bucks?)\b/i);
-  if (!m) return null;
-  const n = Number(m[1].replace(/,/g, ""));
-  return Number.isFinite(n) && n > 0 && n <= 50_000 ? n : null;
-}
 
 /**
  * Purchase, income, or question? Clear cases are decided locally (instant);
